@@ -1,0 +1,52 @@
+import json
+import asyncio
+import sys
+import os
+_agent_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_agent_dir, ".."))
+sys.path.insert(0, _agent_dir)
+
+from shared.llm import call_llm, async_call_llm, extract_json
+from tools import TOOLS, execute_tool
+
+SYSTEM_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "agent.txt")
+
+def load_system_prompt() -> str:
+    with open(SYSTEM_PROMPT_PATH) as f:
+        return f.read()
+
+async def run_agent(query: str) -> dict:
+    tool_list = list(TOOLS.keys())
+
+    # Step 1: LLM selects tools (async, non-blocking)
+    system_prompt = load_system_prompt().format(tool_list=tool_list)
+    decision_raw = await async_call_llm(system_prompt=system_prompt, user_prompt=query)
+    decision = extract_json(decision_raw)
+
+    # Step 2: Execute selected tools concurrently in threads
+    selected_tools = decision.get("selected_tools", [])
+
+    async def _run_tool(tool_name: str):
+        try:
+            result = await asyncio.to_thread(execute_tool, tool_name, query=query)
+            return tool_name, result
+        except Exception as e:
+            return tool_name, {"error": str(e)}
+
+    tool_results = await asyncio.gather(*[_run_tool(t) for t in selected_tools])
+    results = {name: result for name, result in tool_results}
+
+    # Step 3: LLM synthesizes final answer (async, non-blocking)
+    synthesis_prompt = f"""
+Query: {query}
+Tool Results: {json.dumps(results, indent=2)}
+
+Synthesize a structured research response with:
+- papers, datasets, models, recommendations, evaluation_plan
+Return ONLY valid JSON.
+"""
+    final_raw = await async_call_llm(
+        system_prompt="You are a research synthesizer specializing in Computer Vision.",
+        user_prompt=synthesis_prompt
+    )
+    return extract_json(final_raw)

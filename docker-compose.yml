@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  host-agent:
+    build:
+      context: .
+      dockerfile: agents/host-agent/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      - research-agent
+      - solution-agent
+      - experiment-agent
+
+  research-agent:
+    build:
+      context: .
+      dockerfile: agents/research-agent/Dockerfile
+    ports:
+      - "8001:8001"
+    env_file: .env
+
+  solution-agent:
+    build:
+      context: .
+      dockerfile: agents/solution-agent/Dockerfile
+    ports:
+      - "8002:8002"
+    env_file: .env
+
+  experiment-agent:
+    build:
+      context: .
+      dockerfile: agents/experiment-agent/Dockerfile
+    ports:
+      - "8003:8003"
+    env_file: .env

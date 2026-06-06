@@ -1,0 +1,209 @@
+const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    cache: "no-store",
+    ...options,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+export interface AgentStatus {
+  name: string;
+  port: number;
+  status: string;
+  capabilities: string[];
+}
+
+export interface SystemStatus {
+  host_agent: string;
+  agents: Record<string, string>;
+  llm_provider: string;
+  uptime: number;
+}
+
+export interface AgentStats {
+  total_queries: number;
+  active_agents: number;
+  total_agents: number;
+  uptime: number;
+  avg_response_time: number;
+}
+
+export interface TaskEvent {
+  step: string;
+  status: string;
+  detail: string;
+  timestamp: number;
+}
+
+export interface TaskResult {
+  task_id: string;
+  query: string;
+  status: string;
+  report: Record<string, any> | null;
+  diagram: string | null;
+  agents_used: string[];
+  error: string | null;
+  created_at: number;
+  completed_at: number | null;
+  events: TaskEvent[];
+}
+
+export interface QueryResponse {
+  task_id: string;
+  status: string;
+}
+
+export interface HistoryItem {
+  id: number;
+  query: string;
+  report: Record<string, any>;
+  diagram?: string;
+  agents_used: string[];
+  created_at: number;
+}
+
+export interface LLMSettings {
+  provider: string;
+  model: string;
+  api_key_set: boolean;
+  base_url?: string;
+}
+
+export interface SettingsResponse {
+  llm_provider: string;
+  providers: Record<string, LLMSettings>;
+  agent_urls: Record<string, string>;
+}
+
+export interface DiscoAgent {
+  name: string;
+  url: string;
+  port: number;
+  capabilities: string[];
+  status: string;
+  last_seen?: number;
+}
+
+export interface SetupStatus {
+  complete: boolean;
+  steps: { step: string; completed: boolean; completed_at?: number }[];
+}
+
+export const api = {
+  status: () => request<SystemStatus>("/status"),
+  agentStats: () => request<AgentStats>("/agents/stats"),
+
+  submitQuery: (query: string) =>
+    request<QueryResponse>("/query", {
+      method: "POST",
+      body: JSON.stringify({ query }),
+    }),
+
+  streamTask: (taskId: string, onEvent: (ev: TaskEvent) => void, onDone: (result: TaskResult) => void, onError: (err: Error) => void) => {
+    const controller = new AbortController();
+
+    const run = async () => {
+      try {
+        const res = await fetch(`${BASE}/query/stream/${taskId}`, { signal: controller.signal });
+        if (!res.ok || !res.body) {
+          onError(new Error(`SSE ${res.status}`));
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          let eventType = "";
+          for (const line of lines) {
+            if (line.startsWith("event: ")) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith("data: ")) {
+              const data = line.slice(6);
+              if (eventType === "done") {
+                onDone(JSON.parse(data));
+              } else {
+                onEvent(JSON.parse(data));
+              }
+              eventType = "";
+            }
+          }
+        }
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          onError(err);
+        }
+      }
+    };
+
+    run();
+    return () => controller.abort();
+  },
+
+  getTask: (taskId: string) => request<TaskResult>(`/query/task/${taskId}`),
+
+  queryHistory: () => request<HistoryItem[]>("/query/history"),
+  clearHistory: () =>
+    request<{ message: string }>("/query/history", { method: "DELETE" }),
+
+  getSettings: () => request<SettingsResponse>("/settings"),
+  updateSettings: (data: Record<string, any>) =>
+    request<{ message: string }>("/settings", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  discoverAgents: () => request<{ agents: Record<string, any> }>("/agents/discover"),
+  getDiscoveredAgents: () => request<{ agents: DiscoAgent[] }>("/agents/discovered"),
+  getAgentCard: (name: string) => request<any>(`/agents/${name}/card`),
+  getAgentLogs: (name: string) =>
+    request<{ name: string; stdout: string; stderr: string }>(`/agents/${name}/logs`),
+
+  startAgents: () => request<any>("/agents/start", { method: "POST" }),
+  stopAgents: () => request<any>("/agents/stop", { method: "POST" }),
+
+  getDiagramAgentFlow: () =>
+    request<{ diagram: string }>("/diagram/agent-flow", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  getDiagramTechStack: () =>
+    request<{ diagram: string }>("/diagram/tech-stack", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  setupStatus: () => request<SetupStatus>("/setup/status"),
+  completeSetupStep: (step: string) =>
+    request<{ steps: any[] }>("/setup/step", {
+      method: "POST",
+      body: JSON.stringify({ step }),
+    }),
+  completeSetup: (config: {
+    llm_provider: string;
+    api_key: string;
+    model: string;
+    base_url?: string;
+    research_agent_url?: string;
+    solution_agent_url?: string;
+    experiment_agent_url?: string;
+  }) =>
+    request<{ message: string }>("/setup/complete", {
+      method: "POST",
+      body: JSON.stringify(config),
+    }),
+};

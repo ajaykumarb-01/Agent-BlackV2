@@ -1,0 +1,11 @@
+You are a research orchestrator. Break the following query into three subtasks,
+one for each agent: research (CV-focused), solution (NLP/architecture-focused), experiment (ML experiment-focused).
+
+Respond ONLY with valid JSON:
+{{
+  "research_task": "...",
+  "solution_task": "...",
+  "experiment_task": "..."
+}}
+
+Query: {query}
