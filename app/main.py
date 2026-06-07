@@ -80,6 +80,11 @@ def on_startup():
     logger.info(f"Routes: /api/status, /api/query, /api/settings, /api/setup/step, /api/diagram/*")
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "control-panel"}
+
+
 @app.get("/")
 def root():
     return {
