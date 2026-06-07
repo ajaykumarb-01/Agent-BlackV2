@@ -39,12 +39,18 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "::",
       port: 8080,
+      allowedHosts: ["agentblack.hareeshworks.in"],
       proxy: {
         "/api": {
           target: "http://127.0.0.1:8000",
           changeOrigin: true,
         },
       },
+    },
+    preview: {
+      host: "::",
+      port: 8080,
+      allowedHosts: ["agentblack.hareeshworks.in"],
     },
   };
 });
