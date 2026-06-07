@@ -32,6 +32,27 @@ IMAGE_TAG = os.environ.get("IMAGE_TAG", "latest")
 
 IMAGE_BASE = f"ghcr.io/{GITHUB_OWNER}/agent-black"
 
+# ── API Keys: read from env vars or local .env file ─────────────────────────
+def _load_local_env():
+    """Read key=value pairs from the local .env file (project root)."""
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    vals = {}
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                vals[k.strip()] = v.strip()
+    return vals
+
+_LOCAL_ENV = _load_local_env()
+
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", _LOCAL_ENV.get("OPENAI_API_KEY", ""))
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", _LOCAL_ENV.get("ANTHROPIC_API_KEY", ""))
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", _LOCAL_ENV.get("GEMINI_API_KEY", ""))
+
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -158,14 +179,41 @@ def generate_compose_file():
     """)
 
 
-def generate_env_file():
-    """Generate .env for production."""
+def detect_server_ip(client):
+    """Auto-detect the VPS public IP from the server itself."""
+    print(">>> Detecting server public IP...")
+    code, out, err = run(client,
+        "curl -fsS https://api.ipify.org 2>/dev/null || curl -fsS https://ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}'",
+        timeout=15, print_output=False)
+    ip = out.strip()
+    if ip:
+        print(f"    Server public IP: {ip}")
+    else:
+        ip = HOST  # fallback to the SSH connection host
+        print(f"    Could not detect IP, falling back to HOST={ip}")
+    return ip
+
+
+def generate_env_file(server_ip=None, api_url=None):
+    """Generate .env for production. Auto-sets VITE_API_URL from server IP."""
+    ip = server_ip or HOST
+    # If a custom domain is configured, use https+domain; otherwise use http+IP
+    if DOMAIN and DOMAIN != ip:
+        base_url = f"https://{DOMAIN}"
+        api_url = api_url or f"https://{DOMAIN}/api"
+    else:
+        base_url = f"http://{ip}"
+        api_url = api_url or f"http://{ip}:{CONTROL_PANEL_PORT}/api"
+
     return textwrap.dedent(f"""\
-        # ── Agent Black Production Config ─────────────────────
+        # ── Agent Black Production Config (auto-generated) ────
         HOST=0.0.0.0
         PORT={CONTROL_PANEL_PORT}
         COMPOSE_PROJECT_NAME={PROJECT_NAME}
-        VITE_API_URL=https://{DOMAIN}/api
+
+        # ── Auto-detected URLs ────────────────────────────────
+        SERVER_IP={ip}
+        VITE_API_URL={api_url}
 
         # ── Agent Ports (internal Docker networking) ──────────
         RESEARCH_AGENT_HOST=research-agent
@@ -177,13 +225,13 @@ def generate_env_file():
 
         # ── Domain ────────────────────────────────────────────
         DOMAIN={DOMAIN}
-        BASE_URL=https://{DOMAIN}
+        BASE_URL={base_url}
         FRONTEND_PORT={FRONTEND_PORT}
 
-        # ── LLM API Keys (PASTE YOUR KEYS HERE) ──────────────
-        OPENAI_API_KEY=
-        ANTHROPIC_API_KEY=
-        GEMINI_API_KEY=
+        # ── LLM API Keys (auto-injected from local config) ───
+        OPENAI_API_KEY={OPENAI_API_KEY}
+        ANTHROPIC_API_KEY={ANTHROPIC_API_KEY}
+        GEMINI_API_KEY={GEMINI_API_KEY}
     """)
 
 
@@ -294,16 +342,23 @@ def setup(client):
         print(">>> Logging into GHCR...")
         run(client, f'echo "{GHCR_TOKEN}" | docker login ghcr.io -u "{GITHUB_OWNER}" --password-stdin')
 
-    # Step 3: Write config files
+    # Step 3: Auto-detect server IP
+    server_ip = detect_server_ip(client)
+
+    # Step 4: Write config files
     print(">>> Writing docker-compose.yml...")
     run(client, f"mkdir -p {APP_DIR}")
     write_remote_file(client, f"{APP_DIR}/docker-compose.yml", generate_compose_file())
 
-    print(">>> Writing .env file...")
-    write_remote_file(client, f"{APP_DIR}/.env", generate_env_file())
-    print(f"    IMPORTANT: Edit {APP_DIR}/.env on the server to add your API keys!")
+    print(f">>> Writing .env file (VITE_API_URL auto-set for {server_ip})...")
+    write_remote_file(client, f"{APP_DIR}/.env", generate_env_file(server_ip=server_ip))
+    keys_injected = any([OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY])
+    if keys_injected:
+        print("    API keys auto-injected from local .env")
+    else:
+        print(f"    WARNING: No API keys found! Add them to {APP_DIR}/.env on the server.")
 
-    # Step 4: Pull images & start
+    # Step 5: Pull images & start
     print(">>> Pulling images from GHCR and starting services...")
     run(client, f"""
 set -euo pipefail
@@ -316,7 +371,7 @@ sleep 15
 docker compose ps
 """, timeout=600)
 
-    # Step 5: Nginx
+    # Step 6: Nginx
     print(">>> Configuring Nginx...")
     write_remote_file(client, "/etc/nginx/sites-available/agentblack", generate_nginx_config())
     run(client, """
@@ -328,7 +383,7 @@ systemctl enable --now nginx
 systemctl reload nginx
 """)
 
-    # Step 6: Firewall
+    # Step 7: Firewall
     print(">>> Configuring firewall...")
     run(client, """
 ufw allow 22/tcp || true
@@ -337,14 +392,14 @@ ufw allow 443/tcp || true
 ufw --force enable
 """)
 
-    # Step 7: SSL
+    # Step 8: SSL
     print(">>> Obtaining SSL certificate...")
     run(client, f"""
 certbot --nginx -d {DOMAIN} --email {EMAIL} --agree-tos --non-interactive || true
 systemctl reload nginx
 """, timeout=300)
 
-    # Step 8: Health check
+    # Step 9: Health check
     print(">>> Running health checks...")
     run(client, f"""
 echo "=== Docker Status ==="
@@ -374,10 +429,7 @@ curl -fsS -o /dev/null -w "HTTP Status: %{{http_code}}" https://{DOMAIN}/ || ech
     print(f"  Server    : {USER}@{HOST}")
     print(f"  Images    : {IMAGE_BASE}/*:{IMAGE_TAG}")
     print("=" * 60)
-    print(f"\n  NEXT STEP: SSH in and add API keys to {APP_DIR}/.env")
-    print(f"    ssh {USER}@{HOST}")
-    print(f"    nano {APP_DIR}/.env")
-    print(f"    cd {APP_DIR} && docker compose restart")
+    print(f"\n  All done! No manual steps needed.")
 
 
 def check_status(client):
