@@ -215,13 +215,11 @@ def generate_env_file(server_ip=None, api_url=None):
         SERVER_IP={ip}
         VITE_API_URL={api_url}
 
-        # ── Agent Ports (internal Docker networking) ──────────
-        RESEARCH_AGENT_HOST=research-agent
-        RESEARCH_AGENT_PORT=8001
-        SOLUTION_AGENT_HOST=solution-agent
-        SOLUTION_AGENT_PORT=8002
-        EXPERIMENT_AGENT_HOST=experiment-agent
-        EXPERIMENT_AGENT_PORT=8003
+        # ── Agent URLs (Docker service names for internal networking) ──
+        RESEARCH_AGENT_URL=http://research-agent:8001
+        SOLUTION_AGENT_URL=http://solution-agent:8002
+        EXPERIMENT_AGENT_URL=http://experiment-agent:8003
+        HOST_AGENT_URL=http://control-panel:8000
 
         # ── Domain ────────────────────────────────────────────
         DOMAIN={DOMAIN}

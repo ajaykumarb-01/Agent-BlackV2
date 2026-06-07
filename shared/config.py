@@ -91,12 +91,12 @@ ANTHROPIC_BASE_URL = get_setting("ANTHROPIC_BASE_URL")
 ANTHROPIC_MODEL = get_setting("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
 
 AGENT_URLS = {
-    "research": get_setting("RESEARCH_AGENT_URL", "http://localhost:8001"),
-    "solution": get_setting("SOLUTION_AGENT_URL", "http://localhost:8002"),
-    "experiment": get_setting("EXPERIMENT_AGENT_URL", "http://localhost:8003"),
+    "research": get_setting("RESEARCH_AGENT_URL", os.getenv("RESEARCH_AGENT_URL", "http://localhost:8001")),
+    "solution": get_setting("SOLUTION_AGENT_URL", os.getenv("SOLUTION_AGENT_URL", "http://localhost:8002")),
+    "experiment": get_setting("EXPERIMENT_AGENT_URL", os.getenv("EXPERIMENT_AGENT_URL", "http://localhost:8003")),
 }
 
-HOST_AGENT_URL = get_setting("HOST_AGENT_URL", "http://localhost:8000")
-RESEARCH_AGENT_URL = get_setting("RESEARCH_AGENT_URL", "http://localhost:8001")
-SOLUTION_AGENT_URL = get_setting("SOLUTION_AGENT_URL", "http://localhost:8002")
-EXPERIMENT_AGENT_URL = get_setting("EXPERIMENT_AGENT_URL", "http://localhost:8003")
+HOST_AGENT_URL = get_setting("HOST_AGENT_URL", os.getenv("HOST_AGENT_URL", "http://localhost:8000"))
+RESEARCH_AGENT_URL = get_setting("RESEARCH_AGENT_URL", os.getenv("RESEARCH_AGENT_URL", "http://localhost:8001"))
+SOLUTION_AGENT_URL = get_setting("SOLUTION_AGENT_URL", os.getenv("SOLUTION_AGENT_URL", "http://localhost:8002"))
+EXPERIMENT_AGENT_URL = get_setting("EXPERIMENT_AGENT_URL", os.getenv("EXPERIMENT_AGENT_URL", "http://localhost:8003"))

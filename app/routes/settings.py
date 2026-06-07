@@ -34,9 +34,9 @@ def get_settings():
             ),
         },
         agent_urls={
-            "research": get_setting("RESEARCH_AGENT_URL", "http://localhost:8001"),
-            "solution": get_setting("SOLUTION_AGENT_URL", "http://localhost:8002"),
-            "experiment": get_setting("EXPERIMENT_AGENT_URL", "http://localhost:8003"),
+            "research": get_setting("RESEARCH_AGENT_URL", os.getenv("RESEARCH_AGENT_URL", "http://localhost:8001")),
+            "solution": get_setting("SOLUTION_AGENT_URL", os.getenv("SOLUTION_AGENT_URL", "http://localhost:8002")),
+            "experiment": get_setting("EXPERIMENT_AGENT_URL", os.getenv("EXPERIMENT_AGENT_URL", "http://localhost:8003")),
         },
     )
 
