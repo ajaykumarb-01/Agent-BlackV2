@@ -447,7 +447,28 @@ def check_status(client):
 
 
 def update(client):
-    """Pull latest images from GHCR and restart (zero-downtish)."""
+    """Pull latest images from GHCR, refresh config, and restart."""
+    # Refresh config files (agent URLs, etc.)
+    server_ip = detect_server_ip(client)
+    print(">>> Refreshing docker-compose.yml and .env...")
+    write_remote_file(client, f"{APP_DIR}/docker-compose.yml", generate_compose_file())
+    write_remote_file(client, f"{APP_DIR}/.env", generate_env_file(server_ip=server_ip))
+
+    # Clear stale agent URLs from SQLite so env vars take effect
+    print(">>> Clearing stale agent URLs from database...")
+    run(client, f"""
+cd {APP_DIR}
+docker compose exec -T control-panel python -c "
+import sqlite3, os
+db = sqlite3.connect('/app/data/agent_black.db')
+for key in ['RESEARCH_AGENT_URL', 'SOLUTION_AGENT_URL', 'EXPERIMENT_AGENT_URL', 'HOST_AGENT_URL']:
+    db.execute('DELETE FROM settings WHERE key=?', (key,))
+db.commit()
+db.close()
+print('Cleared stale agent URLs')
+" 2>/dev/null || echo "(DB clear skipped — will use env vars on fresh start)"
+""", print_output=True)
+
     print(">>> Pulling latest images from GHCR...")
     code, out, err = run(client, f"""
 set -euo pipefail
