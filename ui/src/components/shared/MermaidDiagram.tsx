@@ -1,21 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import mermaid from "mermaid";
 
-mermaid.initialize({
-  startOnLoad: false,
-  theme: "dark",
-  securityLevel: "loose",
-  themeVariables: {
-    primaryColor: "#4A90D9",
-    primaryTextColor: "#e0e0e0",
-    primaryBorderColor: "#e0e0e0",
-    lineColor: "#666",
-    secondaryColor: "#1a1a2e",
-    tertiaryColor: "#16213e",
-    fontFamily: "monospace",
-    fontSize: "13px",
-  },
-});
+let initialized = false;
+if (!initialized) {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: "dark",
+    securityLevel: "loose",
+    themeVariables: {
+      primaryColor: "#4A90D9",
+      primaryTextColor: "#e0e0e0",
+      primaryBorderColor: "#e0e0e0",
+      lineColor: "#666",
+      secondaryColor: "#1a1a2e",
+      tertiaryColor: "#16213e",
+      fontFamily: "monospace",
+      fontSize: "13px",
+    },
+  });
+  initialized = true;
+}
 
 interface MermaidDiagramProps {
   code: string;

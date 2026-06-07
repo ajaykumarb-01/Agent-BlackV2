@@ -82,9 +82,15 @@ def generate_agent_flow_diagram(query: str = "", report: dict = None) -> str:
     lines.append(f'    Experiment --> T8["eval_metrics"]:::toolNode')
     lines.append(f'    Experiment --> T9["hyperparams"]:::toolNode')
 
-    lines.append(f'    T1 & T2 & T3 --> Research')
-    lines.append(f'    T4 & T5 & T6 --> Solution')
-    lines.append(f'    T7 & T8 & T9 --> Experiment')
+    lines.append(f'    T1 --> Research')
+    lines.append(f'    T2 --> Research')
+    lines.append(f'    T3 --> Research')
+    lines.append(f'    T4 --> Solution')
+    lines.append(f'    T5 --> Solution')
+    lines.append(f'    T6 --> Solution')
+    lines.append(f'    T7 --> Experiment')
+    lines.append(f'    T8 --> Experiment')
+    lines.append(f'    T9 --> Experiment')
 
     lines.append(f'    Research -->|"results"| Host')
     lines.append(f'    Solution -->|"results"| Host')
