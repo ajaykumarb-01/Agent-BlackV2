@@ -472,6 +472,35 @@ print('Cleared stale agent URLs')
 " 2>/dev/null || echo "(DB clear skipped — will use env vars on fresh start)"
 """, print_output=True)
 
+    # Seed LLM settings from .env into DB if missing
+    print(">>> Seeding LLM settings from .env into DB...")
+    run(client, f"""
+cd {APP_DIR}
+docker compose exec -T control-panel python -c "
+import sqlite3, os
+db = sqlite3.connect('/app/data/agent_black_production.db')
+db.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+env_settings = {{
+    'LLM_PROVIDER': os.getenv('LLM_PROVIDER', 'gemini'),
+    'GEMINI_API_KEY': os.getenv('GEMINI_API_KEY', ''),
+    'GEMINI_BASE_URL': os.getenv('GEMINI_BASE_URL', ''),
+    'GEMINI_MODEL': os.getenv('GEMINI_MODEL', 'gemini-1.5-flash'),
+    'OPENAI_API_KEY': os.getenv('OPENAI_API_KEY', ''),
+    'OPENAI_BASE_URL': os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+    'OPENAI_MODEL': os.getenv('OPENAI_MODEL', 'gpt-4o'),
+    'ANTHROPIC_API_KEY': os.getenv('ANTHROPIC_API_KEY', ''),
+    'ANTHROPIC_BASE_URL': os.getenv('ANTHROPIC_BASE_URL', ''),
+    'ANTHROPIC_MODEL': os.getenv('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022'),
+}}
+for k, v in env_settings.items():
+    if v and not db.execute('SELECT 1 FROM settings WHERE key=?', (k,)).fetchone():
+        db.execute('INSERT INTO settings (key, value) VALUES (?, ?)', (k, v))
+db.commit()
+db.close()
+print('LLM settings seeded')
+" 2>/dev/null || echo "(LLM seed skipped)"
+""", print_output=True)
+
     print(">>> Pulling latest images from GHCR...")
     code, out, err = run(client, f"""
 set -euo pipefail

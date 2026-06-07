@@ -1,4 +1,3 @@
-import os
 import re
 import json
 import asyncio
@@ -14,25 +13,19 @@ LLM_RETRY_DELAY = 2
 
 
 def _get_llm_config() -> dict:
-    """Read LLM config: DB first, then env vars as fallback."""
-    def _s(key: str, default: str = "") -> str:
-        v = get_setting(key)
-        if v:
-            return v
-        return os.getenv(key, default)
-
-    provider = _s("LLM_PROVIDER", "gemini")
+    """Read LLM config from SQLite at call time (not import time)."""
+    provider = get_setting("LLM_PROVIDER", "gemini")
     return {
         "provider": provider,
-        "gemini_api_key": _s("GEMINI_API_KEY"),
-        "gemini_base_url": _s("GEMINI_BASE_URL"),
-        "gemini_model": _s("GEMINI_MODEL", "gemini-1.5-flash"),
-        "openai_api_key": _s("OPENAI_API_KEY"),
-        "openai_base_url": _s("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-        "openai_model": _s("OPENAI_MODEL", "gpt-4o"),
-        "anthropic_api_key": _s("ANTHROPIC_API_KEY"),
-        "anthropic_base_url": _s("ANTHROPIC_BASE_URL"),
-        "anthropic_model": _s("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022"),
+        "gemini_api_key": get_setting("GEMINI_API_KEY"),
+        "gemini_base_url": get_setting("GEMINI_BASE_URL"),
+        "gemini_model": get_setting("GEMINI_MODEL", "gemini-1.5-flash"),
+        "openai_api_key": get_setting("OPENAI_API_KEY"),
+        "openai_base_url": get_setting("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+        "openai_model": get_setting("OPENAI_MODEL", "gpt-4o"),
+        "anthropic_api_key": get_setting("ANTHROPIC_API_KEY"),
+        "anthropic_base_url": get_setting("ANTHROPIC_BASE_URL"),
+        "anthropic_model": get_setting("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022"),
     }
 
 
