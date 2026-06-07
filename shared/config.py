@@ -10,10 +10,14 @@ load_dotenv()
 
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
+_VALID_ENVS = ("local", "production")
+APP_ENV = os.getenv("APP_ENV", "local")  # "local" | "production"
+if APP_ENV not in _VALID_ENVS:
+    raise ValueError(f"APP_ENV must be one of {_VALID_ENVS}, got '{APP_ENV}'")
 
 # ── API keys, provider, agent URLs → SQLite only ─────────────────────────────
 _DB_DIR = Path(os.path.dirname(os.path.abspath(__file__))).parent / "data"
-_DB_PATH = _DB_DIR / "agent_black.db"
+_DB_PATH = _DB_DIR / f"agent_black_{APP_ENV}.db"
 _LOCK = _DB_DIR / ".config_init.lock"
 
 
@@ -90,21 +94,38 @@ ANTHROPIC_API_KEY = get_setting("ANTHROPIC_API_KEY")
 ANTHROPIC_BASE_URL = get_setting("ANTHROPIC_BASE_URL")
 ANTHROPIC_MODEL = get_setting("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
 
-# ── Agent URLs: env vars take priority over DB (Docker service names) ───────
-def _agent_url(key: str, default: str) -> str:
-    """Env var > DB > default. Env vars win so Docker service names work."""
+# ── Agent URLs: env var > DB > env-default ─────────────────────────────────
+# Defaults differ by environment: production uses Docker service names,
+# local uses localhost.
+_DEFAULT_AGENTS = {
+    "local": {
+        "RESEARCH_AGENT_URL": "http://localhost:8001",
+        "SOLUTION_AGENT_URL": "http://localhost:8002",
+        "EXPERIMENT_AGENT_URL": "http://localhost:8003",
+        "HOST_AGENT_URL": "http://localhost:8000",
+    },
+    "production": {
+        "RESEARCH_AGENT_URL": "http://research-agent:8001",
+        "SOLUTION_AGENT_URL": "http://solution-agent:8002",
+        "EXPERIMENT_AGENT_URL": "http://experiment-agent:8003",
+        "HOST_AGENT_URL": "http://control-panel:8000",
+    },
+}
+
+def _agent_url(key: str) -> str:
+    """Env var > DB > environment-specific default."""
     env_val = os.getenv(key)
     if env_val:
         return env_val
-    return get_setting(key, default)
+    return get_setting(key, _DEFAULT_AGENTS[APP_ENV].get(key, ""))
 
 AGENT_URLS = {
-    "research": _agent_url("RESEARCH_AGENT_URL", "http://localhost:8001"),
-    "solution": _agent_url("SOLUTION_AGENT_URL", "http://localhost:8002"),
-    "experiment": _agent_url("EXPERIMENT_AGENT_URL", "http://localhost:8003"),
+    "research": _agent_url("RESEARCH_AGENT_URL"),
+    "solution": _agent_url("SOLUTION_AGENT_URL"),
+    "experiment": _agent_url("EXPERIMENT_AGENT_URL"),
 }
 
-HOST_AGENT_URL = _agent_url("HOST_AGENT_URL", "http://localhost:8000")
+HOST_AGENT_URL = _agent_url("HOST_AGENT_URL")
 RESEARCH_AGENT_URL = AGENT_URLS["research"]
 SOLUTION_AGENT_URL = AGENT_URLS["solution"]
 EXPERIMENT_AGENT_URL = AGENT_URLS["experiment"]

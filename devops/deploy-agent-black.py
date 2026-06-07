@@ -211,6 +211,9 @@ def generate_env_file(server_ip=None, api_url=None):
         PORT={CONTROL_PANEL_PORT}
         COMPOSE_PROJECT_NAME={PROJECT_NAME}
 
+        # ── Environment ──────────────────────────────────────
+        APP_ENV=production
+
         # ── Auto-detected URLs ────────────────────────────────
         SERVER_IP={ip}
         VITE_API_URL={api_url}
@@ -460,7 +463,7 @@ def update(client):
 cd {APP_DIR}
 docker compose exec -T control-panel python -c "
 import sqlite3, os
-db = sqlite3.connect('/app/data/agent_black.db')
+db = sqlite3.connect('/app/data/agent_black_production.db')
 for key in ['RESEARCH_AGENT_URL', 'SOLUTION_AGENT_URL', 'EXPERIMENT_AGENT_URL', 'HOST_AGENT_URL']:
     db.execute('DELETE FROM settings WHERE key=?', (key,))
 db.commit()

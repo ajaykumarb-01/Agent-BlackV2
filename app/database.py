@@ -4,9 +4,16 @@ import json
 import time
 import asyncio
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+APP_ENV = os.getenv("APP_ENV", "local")  # "local" | "production"
+if APP_ENV not in ("local", "production"):
+    raise ValueError(f"APP_ENV must be 'local' or 'production', got '{APP_ENV}'")
 
 DB_DIR = Path(os.path.dirname(os.path.abspath(__file__))).parent / "data"
-DB_PATH = DB_DIR / "agent_black.db"
+DB_PATH = DB_DIR / f"agent_black_{APP_ENV}.db"
 
 
 def get_db():
