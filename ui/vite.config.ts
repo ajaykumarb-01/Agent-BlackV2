@@ -36,6 +36,15 @@ export default defineConfig(({ mode }) => {
       }),
       react(),
     ],
-    server: { host: "::", port: 8080 },
+    server: {
+      host: "::",
+      port: 8080,
+      proxy: {
+        "/api": {
+          target: "http://127.0.0.1:8000",
+          changeOrigin: true,
+        },
+      },
+    },
   };
 });

@@ -1,5 +1,5 @@
 import ReactMarkdown from "react-markdown";
-import { Check, Copy, FileText, Workflow, Braces, Loader2 } from "lucide-react";
+import { Check, Copy, FileText, Workflow, Braces, Loader2, ZoomIn, ZoomOut, Maximize2, Minimize2 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Message } from "@/lib/store";
 import { api } from "@/lib/api";
