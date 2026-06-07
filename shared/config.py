@@ -90,13 +90,21 @@ ANTHROPIC_API_KEY = get_setting("ANTHROPIC_API_KEY")
 ANTHROPIC_BASE_URL = get_setting("ANTHROPIC_BASE_URL")
 ANTHROPIC_MODEL = get_setting("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
 
+# ── Agent URLs: env vars take priority over DB (Docker service names) ───────
+def _agent_url(key: str, default: str) -> str:
+    """Env var > DB > default. Env vars win so Docker service names work."""
+    env_val = os.getenv(key)
+    if env_val:
+        return env_val
+    return get_setting(key, default)
+
 AGENT_URLS = {
-    "research": get_setting("RESEARCH_AGENT_URL", os.getenv("RESEARCH_AGENT_URL", "http://localhost:8001")),
-    "solution": get_setting("SOLUTION_AGENT_URL", os.getenv("SOLUTION_AGENT_URL", "http://localhost:8002")),
-    "experiment": get_setting("EXPERIMENT_AGENT_URL", os.getenv("EXPERIMENT_AGENT_URL", "http://localhost:8003")),
+    "research": _agent_url("RESEARCH_AGENT_URL", "http://localhost:8001"),
+    "solution": _agent_url("SOLUTION_AGENT_URL", "http://localhost:8002"),
+    "experiment": _agent_url("EXPERIMENT_AGENT_URL", "http://localhost:8003"),
 }
 
-HOST_AGENT_URL = get_setting("HOST_AGENT_URL", os.getenv("HOST_AGENT_URL", "http://localhost:8000"))
-RESEARCH_AGENT_URL = get_setting("RESEARCH_AGENT_URL", os.getenv("RESEARCH_AGENT_URL", "http://localhost:8001"))
-SOLUTION_AGENT_URL = get_setting("SOLUTION_AGENT_URL", os.getenv("SOLUTION_AGENT_URL", "http://localhost:8002"))
-EXPERIMENT_AGENT_URL = get_setting("EXPERIMENT_AGENT_URL", os.getenv("EXPERIMENT_AGENT_URL", "http://localhost:8003"))
+HOST_AGENT_URL = _agent_url("HOST_AGENT_URL", "http://localhost:8000")
+RESEARCH_AGENT_URL = AGENT_URLS["research"]
+SOLUTION_AGENT_URL = AGENT_URLS["solution"]
+EXPERIMENT_AGENT_URL = AGENT_URLS["experiment"]

@@ -477,8 +477,8 @@ cd {APP_DIR}
 echo ">>> Pulling new images..."
 docker compose pull
 
-echo ">>> Rolling restart..."
-docker compose up -d --remove-orphans
+echo ">>> Recreating containers with fresh config..."
+docker compose up -d --force-recreate --remove-orphans
 
 echo ">>> Waiting for healthy..."
 sleep 15
