@@ -106,7 +106,12 @@ export const api = {
       body: JSON.stringify({ query }),
     }),
 
-  streamTask: (taskId: string, onEvent: (ev: TaskEvent) => void, onDone: (result: TaskResult) => void, onError: (err: Error) => void) => {
+  streamTask: (
+    taskId: string,
+    onEvent: (ev: TaskEvent) => void,
+    onDone: (result: TaskResult) => void,
+    onError: (err: Error) => void,
+  ) => {
     const controller = new AbortController();
 
     const run = async () => {
@@ -162,8 +167,7 @@ export const api = {
   getTask: (taskId: string) => request<TaskResult>(`/query/task/${taskId}`),
 
   queryHistory: () => request<HistoryItem[]>("/query/history"),
-  clearHistory: () =>
-    request<{ message: string }>("/query/history", { method: "DELETE" }),
+  clearHistory: () => request<{ message: string }>("/query/history", { method: "DELETE" }),
 
   getSettings: () => request<SettingsResponse>("/settings"),
   updateSettings: (data: Record<string, any>) =>
