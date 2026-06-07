@@ -11,6 +11,33 @@ from shared.config import AGENT_URLS
 DECOMPOSE_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "orchestrator.txt")
 SELECTION_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "selection.txt")
 
+RESEARCH_DOMAINS = [
+    "computer vision", "image classification", "object detection", "segmentation",
+    "medical imaging", "video analytics", "vision-language", "nlp", "llm",
+    "natural language", "rag", "retrieval augmented", "prompt engineering",
+    "text classification", "summarization", "conversational ai", "information extraction",
+    "machine learning", "deep learning", "neural network", "model selection",
+    "feature engineering", "time series", "hyperparameter", "experiment design",
+    "evaluation strategy", "research", "dataset", "benchmark", "architecture",
+    "transformer", "cnn", "diffusion", "gan", "reinforcement learning",
+    "paper", "arxiv", "论文", "research proposal", "proof of concept",
+]
+
+NOT_RESEARCH_RESPONSE = {
+    "error": "not_research_query",
+    "message": "This query does not appear to be related to AI/ML research. This system is a Research Assistant that helps with: Computer Vision, NLP, Machine Learning research — including literature review, dataset recommendation, model selection, experiment planning, and prototype guidance. Please ask a research-related question.",
+    "supported_topics": [
+        "Research paper discovery and summarization",
+        "Dataset recommendation (CV, NLP, ML)",
+        "Model/architecture recommendation",
+        "Experiment design and planning",
+        "Benchmark search and comparison",
+        "Research gap analysis",
+        "Prototype development guidance",
+    ],
+}
+
+
 def load_prompt(path: str) -> str:
     with open(path) as f:
         return f.read()
@@ -25,16 +52,39 @@ def _load_prompt_safe(path: str) -> str:
         raise RuntimeError(f"Failed to load prompt from {path}: {e}")
 
 
+async def _is_research_query(query: str) -> bool:
+    query_lower = query.lower().strip()
+    if len(query_lower) < 5:
+        return False
+    if any(domain in query_lower for domain in RESEARCH_DOMAINS):
+        return True
+    gate_prompt = f"""You are a research query classifier. Determine if the following query is related to AI, Machine Learning, Computer Vision, NLP, or academic/scientific research.
+
+Respond ONLY with valid JSON:
+{{"is_research": true, "reason": "brief reason"}} or {{"is_research": false, "reason": "brief reason"}}
+
+Query: {query}"""
+    try:
+        raw = await async_call_llm(
+            system_prompt="You are a strict classifier. Only classify queries clearly related to AI/ML/CV/NLP research as true.",
+            user_prompt=gate_prompt,
+        )
+        result = extract_json(raw)
+        return result.get("is_research", False)
+    except Exception:
+        return True
+
+
 async def orchestrate(query: str, progress_callback=None) -> dict:
-    """
-    Main orchestration pipeline:
-      1. Select relevant agents (async LLM call)
-      2. Decompose query into sub-tasks (async LLM call)
-      3. Dispatch to sub-agents concurrently (async HTTP)
-      4. Aggregate results into a final report (async LLM call)
-    """
     if progress_callback is None:
         progress_callback = lambda step, status, detail: None
+
+    # ── Step 0: Research-relevance gate ────────────────────────────────────────
+    progress_callback("validating_query", "running", "Checking if query is research-related...")
+    if not await _is_research_query(query):
+        progress_callback("validating_query", "complete", "Query rejected: not research-related")
+        return NOT_RESEARCH_RESPONSE
+    progress_callback("validating_query", "complete", "Query is research-related")
 
     # ── Step 1: Select agents ──────────────────────────────────────────────────
     progress_callback("selecting_agents", "running", "Selecting relevant agents...")
@@ -50,7 +100,8 @@ async def orchestrate(query: str, progress_callback=None) -> dict:
         valid_agents = {"research", "solution", "experiment"}
         selected_agents = [a for a in selected_agents if a in valid_agents]
         if not selected_agents:
-            selected_agents = ["research", "solution", "experiment"]
+            progress_callback("selecting_agents", "complete", "No relevant agents found for this query")
+            return NOT_RESEARCH_RESPONSE
         progress_callback("selecting_agents", "complete", f"Selected: {', '.join(selected_agents)}")
     except Exception as e:
         selected_agents = ["research", "solution", "experiment"]
