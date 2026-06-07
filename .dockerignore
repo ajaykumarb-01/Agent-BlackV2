@@ -1,14 +1,37 @@
+# VCS / IDE
 .git
+.gitignore
 .idea
+.vscode
+
+# Python
 __pycache__
 *.pyc
-*.pyo
-node_modules
-dist
-.tanstack
-data
-logs
-*.db
-*.sqlite
 .venv
 venv
+*.egg-info
+
+# Node
+ui/node_modules
+ui/.tanstack
+
+# Logs & data
+logs/
+data/
+*.log
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+
+# Docs / CI
+*.md
+.github/
+.env
+.env.deploy
+deploy.sh
+plans/
+
+# OS
+.DS_Store
+Thumbs.db

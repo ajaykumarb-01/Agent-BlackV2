@@ -1,0 +1,86 @@
+# ─── Production docker-compose for VPS deployment ─────────────────────────────
+# Usage:
+#   1. Copy this file + .env.deploy to your VPS
+#   2. cp .env.deploy .env  (edit with your secrets)
+#   3. docker compose -f docker-compose.deploy.yml up -d
+#
+# Images are pulled from GHCR — no source code or build needed on the VPS.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  research-agent:
+    image: ghcr.io/${GITHUB_OWNER}/agent-black/research-agent:latest
+    env_file: .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - agent-black-net
+
+  solution-agent:
+    image: ghcr.io/${GITHUB_OWNER}/agent-black/solution-agent:latest
+    env_file: .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - agent-black-net
+
+  experiment-agent:
+    image: ghcr.io/${GITHUB_OWNER}/agent-black/experiment-agent:latest
+    env_file: .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - agent-black-net
+
+  control-panel:
+    image: ghcr.io/${GITHUB_OWNER}/agent-black/control-panel:latest
+    env_file: .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    depends_on:
+      research-agent:
+        condition: service_healthy
+      solution-agent:
+        condition: service_healthy
+      experiment-agent:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - agent-black-net
+
+  frontend:
+    image: ghcr.io/${GITHUB_OWNER}/agent-black/frontend:latest
+    env_file: .env
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    depends_on:
+      control-panel:
+        condition: service_healthy
+    networks:
+      - agent-black-net
+
+networks:
+  agent-black-net:
+    driver: bridge
