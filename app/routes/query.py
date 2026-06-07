@@ -65,10 +65,20 @@ async def stream_task_events(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
 
     sent_events = set()
+    SSE_TIMEOUT = 300
 
     async def event_generator():
         nonlocal sent_events
+        start = asyncio.get_event_loop().time()
         while True:
+            elapsed = asyncio.get_event_loop().time() - start
+            if elapsed > SSE_TIMEOUT:
+                err_task = await async_get_task(task_id)
+                if err_task and err_task["status"] == "running":
+                    await async_update_task_error(task_id, "Stream timed out after 300s")
+                    err_task = await async_get_task(task_id)
+                yield f"event: done\ndata: {json.dumps(err_task or {})}\n\n"
+                return
             task = await async_get_task(task_id)
             events = await async_get_task_events(task_id)
             for ev in events:

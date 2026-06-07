@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import subprocess
 import time
+import asyncio
 from fastapi import APIRouter, HTTPException
 from app.models import SystemStatus
 from shared.config import get_setting
@@ -19,30 +20,45 @@ AGENTS = [
     {"name": "research-agent", "port": 8001, "dir": os.path.join("agents", "research-agent")},
     {"name": "solution-agent", "port": 8002, "dir": os.path.join("agents", "solution-agent")},
     {"name": "experiment-agent", "port": 8003, "dir": os.path.join("agents", "experiment-agent")},
-    # host-agent runs in-process within the control panel (port 8000)
 ]
 
 router = APIRouter(tags=["control"])
 
+_agent_status_cache: dict[int, tuple[str, float]] = {}
+_CACHE_TTL = 5.0
 
-def _check_agent(port: int) -> str:
+
+async def _check_agent(port: int) -> str:
+    now = time.time()
+    cached = _agent_status_cache.get(port)
+    if cached and (now - cached[1]) < _CACHE_TTL:
+        return cached[0]
     try:
         import httpx
-        r = httpx.get(f"http://localhost:{port}/health", timeout=3)
-        if r.status_code == 200:
-            return "running"
-        return "error"
+        async with httpx.AsyncClient() as client:
+            r = await client.get(f"http://localhost:{port}/health", timeout=1)
+            status = "running" if r.status_code == 200 else "error"
     except Exception:
-        return "stopped"
+        status = "stopped"
+    _agent_status_cache[port] = (status, now)
+    return status
+
+
+async def _check_all_agents() -> dict[str, str]:
+    results = await asyncio.gather(
+        *[_check_agent(a["port"]) for a in AGENTS],
+        return_exceptions=True,
+    )
+    return {
+        a["name"]: (r if isinstance(r, str) else "stopped")
+        for a, r in zip(AGENTS, results)
+    }
 
 
 @router.get("/status", response_model=SystemStatus)
-def get_status():
+async def get_status():
     os.makedirs(LOGS_DIR, exist_ok=True)
-    agents = {}
-    for a in AGENTS:
-        agents[a["name"]] = _check_agent(a["port"])
-    # The host orchestrator runs in-process on port 8000 (this server)
+    agents = await _check_all_agents()
     return SystemStatus(
         host_agent="running",
         agents=agents,
@@ -104,11 +120,12 @@ def get_agent_logs(name: str):
 
 
 @router.get("/agents/stats")
-def get_agent_stats():
+async def get_agent_stats():
     from app.database import get_query_count, get_avg_response_time
+    agents = await _check_all_agents()
     return {
         "total_queries": get_query_count(),
-        "active_agents": sum(1 for a in AGENTS if _check_agent(a["port"]) == "running"),
+        "active_agents": sum(1 for s in agents.values() if s == "running"),
         "total_agents": len(AGENTS),
         "uptime": time.time() - agent_start_time,
         "avg_response_time": get_avg_response_time(),

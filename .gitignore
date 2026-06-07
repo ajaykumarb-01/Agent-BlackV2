@@ -6,3 +6,6 @@ venv/
 .DS_Store
 .idea/
 __init__.py
+
+logs/
+data/

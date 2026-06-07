@@ -134,10 +134,15 @@ export const api = {
               eventType = line.slice(7).trim();
             } else if (line.startsWith("data: ")) {
               const data = line.slice(6);
-              if (eventType === "done") {
-                onDone(JSON.parse(data));
-              } else {
-                onEvent(JSON.parse(data));
+              try {
+                const parsed = JSON.parse(data);
+                if (eventType === "done") {
+                  onDone(parsed);
+                } else {
+                  onEvent(parsed);
+                }
+              } catch {
+                // skip malformed JSON lines
               }
               eventType = "";
             }

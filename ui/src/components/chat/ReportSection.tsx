@@ -15,7 +15,8 @@ export function ReportSections({ sections }: { sections: ReportSections }) {
   return (
     <div className="flex flex-col gap-2">
       {keys.map((k, i) => {
-        const content = sections[k];
+        const raw = sections[k];
+        const content = typeof raw === "string" ? raw : raw ? JSON.stringify(raw, null, 2) : null;
         return (
           <Collapsible key={k} title={titles[k]} defaultOpen={i === 0}>
             {content ? (

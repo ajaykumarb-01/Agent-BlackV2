@@ -26,6 +26,11 @@ function ChatPage() {
 
   useEffect(() => {
     api.queryHistory().then((history) => {
+      const toStr = (v: any): string | null => {
+        if (v == null) return null;
+        if (typeof v === "string") return v;
+        try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+      };
       const synced = history.flatMap((h) => {
         const userMsg: Message = {
           id: `hist-user-${h.id}`,
@@ -36,14 +41,14 @@ function ChatPage() {
         const assistantMsg: Message = {
           id: `hist-asst-${h.id}`,
           role: "assistant",
-          content: h.report?.content as string || "Research complete.",
+          content: toStr(h.report?.content) || "Research complete.",
           timestamp: h.created_at * 1000,
           sections: {
-            literature_review: h.report?.literature_review as string || null,
-            datasets: h.report?.datasets as string || null,
-            models: h.report?.models as string || null,
-            evaluation_plan: h.report?.evaluation_plan as string || null,
-            prototype_guidance: h.report?.prototype_guidance as string || null,
+            literature_review: toStr(h.report?.literature_review),
+            datasets: toStr(h.report?.datasets),
+            models: toStr(h.report?.models),
+            evaluation_plan: toStr(h.report?.evaluation_plan),
+            prototype_guidance: toStr(h.report?.prototype_guidance),
           },
           agentsUsed: h.agents_used,
           raw: h.report,
@@ -90,19 +95,32 @@ function ChatPage() {
           });
         },
         (result) => {
-          updateMessage(placeholderId, {
-            pending: false,
-            content: result.report?.content as string || "Research complete. See sections below.",
-            sections: {
-              literature_review: result.report?.literature_review as string || null,
-              datasets: result.report?.datasets as string || null,
-              models: result.report?.models as string || null,
-              evaluation_plan: result.report?.evaluation_plan as string || null,
-              prototype_guidance: result.report?.prototype_guidance as string || null,
-            },
-            agentsUsed: result.agents_used?.length ? result.agents_used : undefined,
-            raw: result,
-          });
+          const toStr = (v: any): string | null => {
+            if (v == null) return null;
+            if (typeof v === "string") return v;
+            try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+          };
+          if (result.status === "error" || !result.report) {
+            updateMessage(placeholderId, {
+              pending: false,
+              content: result.error ? `Error: ${result.error}` : "Query failed. Please check that the LLM provider and agents are configured correctly.",
+              raw: result,
+            });
+          } else {
+            updateMessage(placeholderId, {
+              pending: false,
+              content: toStr(result.report?.content) || "Research complete. See sections below.",
+              sections: {
+                literature_review: toStr(result.report?.literature_review),
+                datasets: toStr(result.report?.datasets),
+                models: toStr(result.report?.models),
+                evaluation_plan: toStr(result.report?.evaluation_plan),
+                prototype_guidance: toStr(result.report?.prototype_guidance),
+              },
+              agentsUsed: result.agents_used?.length ? result.agents_used : undefined,
+              raw: result,
+            });
+          }
         },
         (err) => {
           updateMessage(placeholderId, {
