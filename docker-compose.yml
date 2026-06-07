@@ -1,38 +1,61 @@
 version: "3.9"
 
 services:
-  host-agent:
-    build:
-      context: .
-      dockerfile: agents/host-agent/Dockerfile
-    ports:
-      - "8000:8000"
-    env_file: .env
-    depends_on:
-      - research-agent
-      - solution-agent
-      - experiment-agent
-
   research-agent:
     build:
       context: .
       dockerfile: agents/research-agent/Dockerfile
-    ports:
-      - "8001:8001"
     env_file: .env
+    restart: unless-stopped
+    networks:
+      - agent-black-net
 
   solution-agent:
     build:
       context: .
       dockerfile: agents/solution-agent/Dockerfile
-    ports:
-      - "8002:8002"
     env_file: .env
+    restart: unless-stopped
+    networks:
+      - agent-black-net
 
   experiment-agent:
     build:
       context: .
       dockerfile: agents/experiment-agent/Dockerfile
-    ports:
-      - "8003:8003"
     env_file: .env
+    restart: unless-stopped
+    networks:
+      - agent-black-net
+
+  control-panel:
+    build:
+      context: .
+      dockerfile: agents/host-agent/Dockerfile.control-panel
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file: .env
+    depends_on:
+      - research-agent
+      - solution-agent
+      - experiment-agent
+    restart: unless-stopped
+    networks:
+      - agent-black-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: devops/Dockerfile.frontend
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file: .env
+    depends_on:
+      - control-panel
+    restart: unless-stopped
+    networks:
+      - agent-black-net
+
+networks:
+  agent-black-net:
+    driver: bridge
