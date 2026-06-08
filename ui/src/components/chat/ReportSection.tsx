@@ -34,8 +34,33 @@ function parseSection(raw: unknown): unknown {
   return raw;
 }
 
+function getCardTitle(paper: Record<string, unknown>): string {
+  const titleKeys = [
+    "title",
+    "name",
+    "component",
+    "component_name",
+    "label",
+    "step",
+    "step_name",
+    "phase",
+    "phase_name",
+    "module",
+    "module_name",
+    "metric",
+    "metric_name",
+  ] as const;
+
+  for (const key of titleKeys) {
+    const value = paper[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+
+  return "Untitled";
+}
+
 function PaperCard({ paper }: { paper: Record<string, unknown> }) {
-  const title = String(paper.title || paper.name || "Untitled");
+  const title = getCardTitle(paper);
   const authors = Array.isArray(paper.authors)
     ? paper.authors.join(", ")
     : typeof paper.authors === "string" ? paper.authors : "";
