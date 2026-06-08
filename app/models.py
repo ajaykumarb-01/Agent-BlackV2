@@ -70,6 +70,12 @@ class DiagramFromReportRequest(BaseModel):
     agents_used: list[str] = []
     events: list[dict[str, Any]] = []
 
+
+class ReportPdfRequest(BaseModel):
+    query: str
+    report: dict[str, Any]
+    agents_used: list[str] = []
+
 class DiagramResponse(BaseModel):
     diagram: str
     description: str

@@ -13,6 +13,19 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    cache: "no-store",
+    ...options,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API ${res.status}: ${text}`);
+  }
+  return res.blob();
+}
+
 export interface AgentStatus {
   name: string;
   port: number;
@@ -206,6 +219,15 @@ export const api = {
   },
 
   getTask: (taskId: string) => request<TaskResult>(`/query/task/${taskId}`),
+  downloadReportPdf: (data: {
+    query: string;
+    report: Record<string, any>;
+    agents_used?: string[];
+  }) =>
+    requestBlob("/query/report/pdf", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 
   queryHistory: () => request<HistoryItem[]>("/query/history"),
   clearHistory: () => request<{ message: string }>("/query/history", { method: "DELETE" }),

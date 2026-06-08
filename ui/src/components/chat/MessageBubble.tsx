@@ -1,5 +1,5 @@
 import ReactMarkdown from "react-markdown";
-import { Check, Copy, FileText, Workflow, Braces, Loader2, ZoomIn, ZoomOut, Maximize2, Minimize2 } from "lucide-react";
+import { Check, Copy, FileDown, FileText, Workflow, Braces, Loader2, ZoomIn, ZoomOut, Maximize2, Minimize2 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Message } from "@/lib/store";
 import { api } from "@/lib/api";
@@ -44,11 +44,41 @@ function formatContent(raw: unknown): string | null {
 export function MessageBubble({ message }: { message: Message }) {
   const [view, setView] = useState<View>("report");
   const [copied, setCopied] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const copy = async () => {
     await navigator.clipboard.writeText(message.content || JSON.stringify(message.raw, null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
+  };
+
+  const downloadPdf = async () => {
+    const report = (message.raw as { report?: Record<string, any> } | undefined)?.report;
+    if (!report) return;
+
+    setDownloadingPdf(true);
+    try {
+      const blob = await api.downloadReportPdf({
+        query: message.query || ((message.raw as { query?: string } | undefined)?.query ?? "Research Report"),
+        report,
+        agents_used: message.agentsUsed || [],
+      });
+      const fileNameBase = (message.query || "research-report")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 60) || "research-report";
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${fileNameBase}-report.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   if (message.role === "user") {
@@ -130,6 +160,16 @@ function IconBtn({
                   {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                   {copied ? "Copied" : "Copy"}
                 </button>
+                {!!(message.raw as { report?: Record<string, any> } | undefined)?.report && (
+                  <button
+                    onClick={downloadPdf}
+                    disabled={downloadingPdf}
+                    className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-text-secondary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {downloadingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+                    {downloadingPdf ? "Preparing PDF" : "Download PDF"}
+                  </button>
+                )}
               </div>
 
               {view === "report" && message.sections && (

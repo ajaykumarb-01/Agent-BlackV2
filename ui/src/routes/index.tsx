@@ -102,6 +102,7 @@ function historyItemToMessages(h: {
   const assistantMsg: Message = {
     id: `hist-asst-${h.id}`,
     role: "assistant",
+    query: h.query,
     content:
       toDisplayString(h.report?.content)
       || (h.report?.error === "not_research_query"
@@ -235,6 +236,7 @@ function ChatPage() {
               || "Research complete. See report below.";
             updateMessage(placeholderId, {
               pending: false,
+              query: text,
               content,
               sections,
               agentsUsed: result.agents_used?.length ? result.agents_used : undefined,

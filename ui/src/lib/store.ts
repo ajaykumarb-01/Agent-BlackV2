@@ -29,6 +29,7 @@ export interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  query?: string;
   sections?: ReportSections;
   agentsUsed?: string[];
   reasoning?: string;
