@@ -41,10 +41,18 @@ function formatContent(raw: unknown): string | null {
   return text;
 }
 
+function getMessageReport(message: Message): Record<string, any> | null {
+  const raw = message.raw as { report?: Record<string, any> } | Record<string, any> | undefined;
+  if (!raw || typeof raw !== "object") return null;
+  if (raw.report && typeof raw.report === "object") return raw.report;
+  return raw;
+}
+
 export function MessageBubble({ message }: { message: Message }) {
   const [view, setView] = useState<View>("report");
   const [copied, setCopied] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const report = getMessageReport(message);
 
   const copy = async () => {
     await navigator.clipboard.writeText(message.content || JSON.stringify(message.raw, null, 2));
@@ -53,12 +61,13 @@ export function MessageBubble({ message }: { message: Message }) {
   };
 
   const downloadPdf = async () => {
-    const report = (message.raw as { report?: Record<string, any> } | undefined)?.report;
     if (!report) return;
 
     setDownloadingPdf(true);
     try {
       const blob = await api.downloadReportPdf({
+        task_id: message.taskId,
+        query_id: message.queryId,
         query: message.query || ((message.raw as { query?: string } | undefined)?.query ?? "Research Report"),
         report,
         agents_used: message.agentsUsed || [],
@@ -160,7 +169,7 @@ function IconBtn({
                   {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                   {copied ? "Copied" : "Copy"}
                 </button>
-                {!!(message.raw as { report?: Record<string, any> } | undefined)?.report && (
+                {!!report && (
                   <button
                     onClick={downloadPdf}
                     disabled={downloadingPdf}

@@ -103,6 +103,7 @@ function historyItemToMessages(h: {
     id: `hist-asst-${h.id}`,
     role: "assistant",
     query: h.query,
+    queryId: h.id,
     content:
       toDisplayString(h.report?.content)
       || (h.report?.error === "not_research_query"
@@ -112,7 +113,7 @@ function historyItemToMessages(h: {
     timestamp: h.created_at * 1000,
     sections,
     agentsUsed: h.agents_used,
-    raw: { ...h.report, diagram: h.diagram },
+    raw: { query: h.query, report: h.report, diagram: h.diagram },
   };
   return [userMsg, assistantMsg];
 }
@@ -237,6 +238,7 @@ function ChatPage() {
             updateMessage(placeholderId, {
               pending: false,
               query: text,
+              taskId: result.task_id,
               content,
               sections,
               agentsUsed: result.agents_used?.length ? result.agents_used : undefined,

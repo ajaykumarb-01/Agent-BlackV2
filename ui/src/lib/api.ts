@@ -220,9 +220,11 @@ export const api = {
 
   getTask: (taskId: string) => request<TaskResult>(`/query/task/${taskId}`),
   downloadReportPdf: (data: {
-    query: string;
-    report: Record<string, any>;
+    query?: string;
+    report?: Record<string, any>;
     agents_used?: string[];
+    task_id?: string;
+    query_id?: number;
   }) =>
     requestBlob("/query/report/pdf", {
       method: "POST",

@@ -30,6 +30,8 @@ export interface Message {
   content: string;
   timestamp: number;
   query?: string;
+  queryId?: number;
+  taskId?: string;
   sections?: ReportSections;
   agentsUsed?: string[];
   reasoning?: string;

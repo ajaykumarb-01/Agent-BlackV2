@@ -1,12 +1,13 @@
 # Agent Black
 
-A collaborative multi-agent research assistant ecosystem built with **FastAPI**, **React** (TanStack Start), **LLMs** (Gemini / OpenAI / Anthropic), **MCP** (Model Context Protocol), and **A2A** (Agent-to-Agent) communication.
+A multi-agent research platform built with **FastAPI**, **React** (TanStack Start), **LLMs** (Gemini / OpenAI / Anthropic), **MCP** (Model Context Protocol), and **A2A** (Agent-to-Agent) communication.
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Screenshots](#screenshots)
 - [Architecture](#architecture)
 - [Agents](#agents)
   - [Control Panel (Orchestrator)](#control-panel-orchestrator)
@@ -46,8 +47,37 @@ Agent Black is a multi-agent system where a **Control Panel** orchestrates three
 - Multi-provider LLM support (Gemini, OpenAI, Anthropic) with automatic retry
 - Real-time task progress streaming via SSE
 - SQLite-backed configuration, query history, and agent discovery
-- Responsive React frontend with chat, dashboard, and diagram views
+- Responsive React frontend with chat, dashboard, agents, history, settings, and diagram views
+- Structured report rendering with Mermaid diagrams and PDF report download
 - Docker containerization
+
+---
+
+## Screenshots
+
+### Chat Workspace
+
+![Chat Workspace](Sample-img/Chat.png)
+
+### Dashboard
+
+![Dashboard](Sample-img/Dashboard.png)
+
+### Agents
+
+![Agents](Sample-img/Agents.png)
+
+### History
+
+![History](Sample-img/History.png)
+
+### Settings
+
+![Settings](Sample-img/Settings.png)
+
+### About
+
+![About](Sample-img/About.png)
 
 ---
 
@@ -89,12 +119,12 @@ User Query
          └──────────┴──────────┘
                     │
                     ▼
-         ┌──────────────────┐
-         │   React Frontend │
-         │   (ui/, port     │
-         │   configured     │
-         │   via VITE_API)  │
-         └──────────────────┘
+         ┌──────────────────────────┐
+         │   React Frontend         │
+         │   chat, reports,         │
+         │   diagrams, history,     │
+         │   settings, dashboard    │
+         └──────────────────────────┘
 ```
 
 ---
@@ -121,6 +151,7 @@ User Query
 6. **Result aggregation** — LLM synthesizes all agent outputs into a unified report
 7. **Streaming progress** — SSE endpoint streams task events to the frontend
 8. **Settings & discovery** — manages LLM provider config, discovers agent capabilities
+9. **Report delivery** — returns structured reports, Mermaid diagrams, and downloadable PDFs
 
 ### CV Research Agent
 
@@ -217,7 +248,8 @@ Every agent supports Agent-to-Agent communication via JSON-RPC 2.0.
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /.well-known/agent-card` | Returns agent card (name, description, capabilities, skills) |
+| `GET /.well-known/agent-card.json` | Standard A2A agent card endpoint |
+| `GET /.well-known/agent-card` | Legacy A2A agent card endpoint |
 | `POST /a2a` | Accepts `a2a/agent-card` and `a2a/sendTask` methods |
 
 ### Agent Card Format
@@ -228,12 +260,17 @@ Every agent supports Agent-to-Agent communication via JSON-RPC 2.0.
   "description": "Specializes in computer vision research...",
   "url": "http://localhost:8001",
   "version": "1.0.0",
-  "capabilities": ["paper_search", "paper_summarization", ...],
+  "capabilities": {"streaming": true},
   "skills": [{"id": "paper_search", "name": "Paper Search", ...}],
   "defaultInputModes": ["text"],
   "defaultOutputModes": ["text"]
 }
 ```
+
+The Control Panel discovery response also enriches each live agent entry with:
+
+- `mcp_tools`: tool metadata fetched from the agent's `/tools` endpoint
+- `communication_methods`: endpoint URLs for A2A, MCP, tools, health, and capabilities
 
 ### Task Request
 
@@ -268,9 +305,10 @@ The Control Panel runs a 5-step pipeline for every query:
 
 ```
 Step 0: Research-relevance gate
-        ├─ Keyword fast-path (30+ AI/ML/CV/NLP keywords)
-        └─ LLM fallback classifier
-        └─ Reject → return {error: "not_research_query", supported_topics: [...]}
+        ├─ Rule-based validator scores research, action, ambiguous, and negative signals
+        ├─ Clear accept/reject decisions return immediately
+        ├─ Ambiguous queries are sent to an LLM classifier
+        └─ Reject → return {error: "not_research_query", reason, suggestion, supported_topics, validation}
 
 Step 1: Agent selection (LLM)
         └─ Decides which of research/solution/experiment agents are needed
@@ -306,12 +344,13 @@ The UI is a **React 19** single-page app built with:
 
 | Route | Description |
 |-------|-------------|
-| `/` | Chat interface — submit queries, view streamed results |
+| `/` | Chat interface — submit queries, view streamed results, structured reports, and PDF export |
 | `/dashboard` | System stats, agent status, recent activity |
 | `/agents` | Agent details, tools, logs, start/stop controls |
 | `/history` | Searchable query history |
 | `/settings` | LLM provider configuration, agent URLs, theme |
 | `/diagram` | Agent flow and tech stack diagrams |
+| `/about` | Product overview, team, and technical stack |
 
 ### Running the Frontend
 
@@ -395,9 +434,10 @@ docker-compose down
 | `POST` | `/api/query` | Submit research query → returns `task_id` |
 | `GET` | `/api/query/stream/{task_id}` | SSE stream of task progress events |
 | `GET` | `/api/query/task/{task_id}` | Get task status and events |
+| `POST` | `/api/query/report/pdf` | Download a formatted PDF version of a report |
 | `GET` | `/api/query/history` | Recent query history |
 | `DELETE` | `/api/query/history` | Clear all history |
-| `GET` | `/api/settings` | Get LLM provider settings |
+| `GET` | `/api/settings` | Get LLM provider settings with `api_key_set` flags only |
 | `PUT` | `/api/settings` | Update LLM provider settings |
 | `GET` | `/api/setup/status` | Check if initial setup is complete |
 | `POST` | `/api/setup/step` | Complete a setup step |
@@ -411,7 +451,8 @@ docker-compose down
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/capabilities` | Agent capabilities and task list |
-| `GET` | `/.well-known/agent-card` | A2A agent card |
+| `GET` | `/.well-known/agent-card.json` | Standard A2A agent card |
+| `GET` | `/.well-known/agent-card` | Legacy A2A agent card |
 | `GET` | `/tools` | List all registered MCP tools |
 | `GET` | `/health` | Health check |
 | `POST` | `/research` | Execute CV research agent |
@@ -423,7 +464,8 @@ docker-compose down
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/capabilities` | Agent capabilities and task list |
-| `GET` | `/.well-known/agent-card` | A2A agent card |
+| `GET` | `/.well-known/agent-card.json` | Standard A2A agent card |
+| `GET` | `/.well-known/agent-card` | Legacy A2A agent card |
 | `GET` | `/tools` | List all registered MCP tools |
 | `GET` | `/health` | Health check |
 | `POST` | `/solution` | Execute NLP solution agent |
@@ -435,7 +477,8 @@ docker-compose down
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/capabilities` | Agent capabilities and task list |
-| `GET` | `/.well-known/agent-card` | A2A agent card |
+| `GET` | `/.well-known/agent-card.json` | Standard A2A agent card |
+| `GET` | `/.well-known/agent-card` | Legacy A2A agent card |
 | `GET` | `/tools` | List all registered MCP tools |
 | `GET` | `/health` | Health check |
 | `POST` | `/experiment` | Execute ML experiment agent |
@@ -488,7 +531,7 @@ curl -X POST http://localhost:8000/api/query \
 - Experiment plan (baselines, ablations, compute estimate)
 - Prototype guidance (MVP pipeline, common pitfalls)
 
-### Scenario 4: Non-Rejection of Non-Research Query
+### Scenario 4: Rejection of Non-Research Query
 
 ```bash
 curl -X POST http://localhost:8000/api/query \
@@ -501,6 +544,8 @@ curl -X POST http://localhost:8000/api/query \
 {
   "error": "not_research_query",
   "message": "This query does not appear to be related to AI/ML research...",
+  "reason": "The query matches non-research patterns or lacks research intent.",
+  "suggestion": "Try asking about papers, datasets, models, evaluation metrics, experiment design, or prototype guidance.",
   "supported_topics": ["Research paper discovery and summarization", ...]
 }
 ```
@@ -554,7 +599,7 @@ curl -X POST http://localhost:8001/mcp \
 
 ```bash
 # Discover agent capabilities
-curl http://localhost:8001/.well-known/agent-card
+curl http://localhost:8001/.well-known/agent-card.json
 
 # Send task via A2A protocol
 curl -X POST http://localhost:8001/a2a \
@@ -583,13 +628,13 @@ Configuration is stored in **SQLite** (`data/agent_black.db`). The `.env` file o
 | Key | Default | Description |
 |-----|---------|-------------|
 | `LLM_PROVIDER` | `gemini` | LLM provider: `gemini`, `openai`, or `anthropic` |
-| `GEMINI_API_KEY` | — | Google Gemini API key |
+| `GEMINI_API_KEY` | — | Google Gemini API key; not returned by `GET /api/settings` |
 | `GEMINI_BASE_URL` | — | Custom Gemini endpoint (optional) |
 | `GEMINI_MODEL` | `gemini-1.5-flash` | Gemini model name |
-| `OPENAI_API_KEY` | — | OpenAI API key |
+| `OPENAI_API_KEY` | — | OpenAI API key; not returned by `GET /api/settings` |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI API base URL |
 | `OPENAI_MODEL` | `gpt-4o` | OpenAI model name |
-| `ANTHROPIC_API_KEY` | — | Anthropic API key |
+| `ANTHROPIC_API_KEY` | — | Anthropic API key; not returned by `GET /api/settings` |
 | `ANTHROPIC_BASE_URL` | — | Custom Anthropic endpoint (optional) |
 | `ANTHROPIC_MODEL` | `claude-3-5-sonnet-20241022` | Anthropic model name |
 | `HOST_AGENT_URL` | `http://localhost:8000` | Control panel URL |
@@ -602,7 +647,7 @@ Configuration is stored in **SQLite** (`data/agent_black.db`). The `.env` file o
 ## Project Structure
 
 ```
-Agent-BlackV2/
+Agent-Black/
 ├── app/                              # Control Panel (FastAPI on port 8000)
 │   ├── main.py                       # FastAPI app, CORS, logging, routes
 │   ├── database.py                   # SQLite CRUD, async wrappers

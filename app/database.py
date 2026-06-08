@@ -181,6 +181,25 @@ def get_query_history(limit: int = 20):
     ]
 
 
+def get_query_by_id(query_id: int):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, query, report, diagram, agents_used, created_at FROM queries WHERE id=?",
+        (query_id,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "query": row["query"],
+        "report": json.loads(row["report"]) if row["report"] else None,
+        "diagram": row["diagram"],
+        "agents_used": json.loads(row["agents_used"]) if row["agents_used"] else [],
+        "created_at": row["created_at"],
+    }
+
+
 def get_query_count():
     conn = get_db()
     count = conn.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
@@ -298,3 +317,7 @@ async def async_get_task_events(task_id: str):
 
 async def async_save_query(query: str, report: dict, diagram: str = None, agents_used: list = None):
     await asyncio.to_thread(save_query, query, report, diagram, agents_used)
+
+
+async def async_get_query_by_id(query_id: int):
+    return await asyncio.to_thread(get_query_by_id, query_id)

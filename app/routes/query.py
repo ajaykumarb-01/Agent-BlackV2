@@ -15,6 +15,7 @@ from app.database import (
     get_query_history, get_db,
     async_create_task, async_update_task_result, async_update_task_error,
     async_save_task_event, async_get_task, async_get_task_events, async_save_query,
+    async_get_query_by_id,
 )
 
 router = APIRouter(tags=["query"])
@@ -26,6 +27,11 @@ REPORT_SECTION_TITLES = {
     "evaluation_plan": "Evaluation Plan",
     "prototype_guidance": "Prototype Guidance",
 }
+
+REPORT_SECTION_ORDER = [
+    "content",
+    *REPORT_SECTION_TITLES.keys(),
+]
 
 
 def _format_label(value: str) -> str:
@@ -159,12 +165,20 @@ def _build_pdf(report_title: str, lines: list[str]) -> bytes:
 
     flush_page()
 
-    objects: list[bytes] = []
+    objects: list[bytes | None] = []
 
     def add_object(data: str | bytes) -> int:
         payload = data.encode("latin-1") if isinstance(data, str) else data
         objects.append(payload)
         return len(objects)
+
+    def reserve_object() -> int:
+        objects.append(None)
+        return len(objects)
+
+    def set_object(object_id: int, data: str | bytes):
+        payload = data.encode("latin-1") if isinstance(data, str) else data
+        objects[object_id - 1] = payload
 
     font_obj = add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
     page_obj_ids: list[int] = []
@@ -173,21 +187,24 @@ def _build_pdf(report_title: str, lines: list[str]) -> bytes:
     for commands in pages:
         stream = "\n".join(commands).encode("latin-1", errors="replace")
         content_obj_ids.append(add_object(b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream"))
-        page_obj_ids.append(0)
+        page_obj_ids.append(reserve_object())
 
-    pages_obj = len(objects) + 1
+    pages_obj = reserve_object()
     for index, content_id in enumerate(content_obj_ids):
-        page_obj_ids[index] = add_object(
+        set_object(
+            page_obj_ids[index],
             f"<< /Type /Page /Parent {pages_obj} 0 R /MediaBox [0 0 {page_width} {page_height}] /Resources << /Font << /F1 {font_obj} 0 R >> >> /Contents {content_id} 0 R >>"
         )
 
     kids = " ".join(f"{page_id} 0 R" for page_id in page_obj_ids)
-    add_object(f"<< /Type /Pages /Count {len(page_obj_ids)} /Kids [{kids}] >>")
+    set_object(pages_obj, f"<< /Type /Pages /Count {len(page_obj_ids)} /Kids [{kids}] >>")
     catalog_obj = add_object(f"<< /Type /Catalog /Pages {pages_obj} 0 R >>")
 
     pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
     offsets = [0]
     for index, obj in enumerate(objects, start=1):
+        if obj is None:
+            raise ValueError(f"PDF object {index} was reserved but never written")
         offsets.append(len(pdf))
         pdf.extend(f"{index} 0 obj\n".encode("ascii"))
         pdf.extend(obj)
@@ -221,6 +238,13 @@ def _build_report_pdf_bytes(query: str, report: dict, agents_used: list[str]) ->
         lines.append("")
         _append_report_lines(lines, report)
     else:
+        content_value = report.get("content") if isinstance(report, dict) else None
+        if content_value not in (None, "", [], {}):
+            lines.append("Executive Summary")
+            lines.append("")
+            _append_report_lines(lines, content_value)
+            lines.append("")
+
         for key, title in REPORT_SECTION_TITLES.items():
             lines.append(title)
             lines.append("")
@@ -230,6 +254,21 @@ def _build_report_pdf_bytes(query: str, report: dict, agents_used: list[str]) ->
             else:
                 _append_report_lines(lines, value)
             lines.append("")
+
+        if isinstance(report, dict):
+            remaining_items = [
+                (key, value)
+                for key, value in report.items()
+                if key not in REPORT_SECTION_ORDER and value not in (None, "", [], {})
+            ]
+            if remaining_items:
+                lines.append("Additional Report Data")
+                lines.append("")
+                for key, value in remaining_items:
+                    lines.append(_format_label(key))
+                    lines.append("")
+                    _append_report_lines(lines, value)
+                    lines.append("")
 
     safe_slug = re.sub(r"[^a-z0-9]+", "-", (query or "report").lower()).strip("-") or "report"
     filename = f"{safe_slug[:60]}-report.pdf"
@@ -328,11 +367,33 @@ async def get_history():
 
 @router.post("/query/report/pdf")
 async def download_report_pdf(req: ReportPdfRequest):
+    query = req.query
+    report = req.report
+    agents_used = req.agents_used
+
+    if req.task_id:
+        task = await async_get_task(req.task_id)
+        if not task or not task.get("report"):
+            raise HTTPException(status_code=404, detail="Task report not found")
+        query = task.get("query")
+        report = task.get("report")
+        agents_used = task.get("agents_used") or []
+    elif req.query_id is not None:
+        history_item = await async_get_query_by_id(req.query_id)
+        if not history_item or not history_item.get("report"):
+            raise HTTPException(status_code=404, detail="Query history report not found")
+        query = history_item.get("query")
+        report = history_item.get("report")
+        agents_used = history_item.get("agents_used") or []
+
+    if not query or not report:
+        raise HTTPException(status_code=400, detail="Provide report data, task_id, or query_id")
+
     pdf_bytes, filename = await asyncio.to_thread(
         _build_report_pdf_bytes,
-        req.query,
-        req.report,
-        req.agents_used,
+        query,
+        report,
+        agents_used,
     )
     return Response(
         content=pdf_bytes,

@@ -72,9 +72,11 @@ class DiagramFromReportRequest(BaseModel):
 
 
 class ReportPdfRequest(BaseModel):
-    query: str
-    report: dict[str, Any]
+    query: Optional[str] = None
+    report: Optional[dict[str, Any]] = None
     agents_used: list[str] = []
+    task_id: Optional[str] = None
+    query_id: Optional[int] = None
 
 class DiagramResponse(BaseModel):
     diagram: str

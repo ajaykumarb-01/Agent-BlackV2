@@ -191,15 +191,15 @@ function About() {
               <span className="text-lg font-bold text-background tracking-tighter">A·B</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Agent Black V2</h1>
-              <p className="text-sm text-text-secondary">Multi-Agent Research Ecosystem</p>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Agent Black</h1>
+              <p className="text-sm text-text-secondary">Multi-Agent Research Platform</p>
             </div>
           </div>
 
           <p className="mt-4 max-w-2xl text-sm leading-relaxed text-text-secondary sm:text-base">
-            A multi-agent research assistant ecosystem with three specialized agents — CV, NLP, and ML —
-            coordinated by a host orchestrator via A2A protocol and MCP tools. Built with a ChatGPT-style
-            monochrome interface for seamless research workflows.
+            Agent Black is a multi-agent research platform with specialized CV, NLP, and ML agents,
+            coordinated by a host orchestrator through the A2A protocol and MCP tooling. The system is
+            designed to support structured, end-to-end research workflows through a focused, professional interface.
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3">
@@ -242,7 +242,7 @@ function About() {
       {/* Team */}
       <section className="mb-12">
         <h2 className="mb-1 text-lg font-semibold tracking-tight">Team</h2>
-        <p className="mb-5 text-sm text-text-secondary">The people who built Agent Black V2.</p>
+        <p className="mb-5 text-sm text-text-secondary">The team behind Agent Black.</p>
 
         <div className="grid gap-3 sm:grid-cols-3">
           {team.map((m, i) => (
@@ -307,7 +307,7 @@ function About() {
       {/* Footer */}
       <div className="border-t border-border pt-6 text-center text-xs text-text-muted">
         <p>
-          Agent Black V2 · Built with fastapi + react + tailwindcss
+          Agent Black · Built with FastAPI, React, and Tailwind CSS
         </p>
         <p className="mt-1">
           © {new Date().getFullYear()} Agent Black Contributors ·{" "}
