@@ -114,22 +114,47 @@ def generate_agent_flow_diagram(query: str = "", report: dict = None) -> str:
     return "\n".join(lines)
 
 
+def _extract_items(report: dict, key: str, label_key: str = "title", max_items: int = 3) -> list[str]:
+    """Extract a list of item previews from a report section."""
+    val = report.get(key)
+    if not val:
+        return []
+    if isinstance(val, str):
+        items = [line.strip() for line in val.split("\n") if line.strip()][:max_items]
+        if not items:
+            items = [val[:60]]
+        return items
+    if isinstance(val, list):
+        previews = []
+        for item in val[:max_items]:
+            if isinstance(item, dict):
+                t = item.get(label_key, "") or item.get("name", "") or str(item.get("id", ""))
+                previews.append(str(t)[:60])
+            else:
+                previews.append(str(item)[:60])
+        return previews
+    if isinstance(val, dict):
+        return [f"{k}: {str(v)[:40]}" for k, v in list(val.items())[:max_items]]
+    return [str(val)[:60]]
+
+
 def generate_dynamic_diagram(query: str, report: dict, agents_used: list[str] = None, events: list[dict] = None) -> str:
     """Generate a mermaid diagram dynamically based on the actual report data for a specific project."""
     if not agents_used:
         agents_used = list(AGENT_TOOL_MAP.keys())
 
     lines = ["graph TD"]
+    import json
 
-    # Query node
-    safe_query = _escape_mmd(query[:80])
-    lines.append(f'    User["<b>User Query</b>\\n{safe_query}"]:::userNode')
+    # ── Top: Query ──
+    safe_query = _escape_mmd(query[:100])
+    lines.append(f'    User["<b>Research Query</b>\\n{safe_query}"]:::userNode')
 
-    # Host node
+    # ── Host ──
     lines.append(f'    User -->|"submit"| Host["<b>Host Orchestrator</b>\\n:8000"]:::hostNode')
 
-    # Subgraph for active agents
-    lines.append(f'    subgraph agents_box["<b>Specialized Agents</b>"]')
+    # ── Specialized Agents ──
+    lines.append(f'    subgraph agents_box["<b>Active Agents</b>"]')
 
     tool_idx = 0
     for agent in agents_used:
@@ -139,7 +164,6 @@ def generate_dynamic_diagram(query: str, report: dict, agents_used: list[str] = 
         node_id = f'Agent_{agent}'
         lines.append(f'    Host -->|"route"| {node_id}["{label}"]:::{color_key}Node')
 
-        # Show only tools relevant to this agent from the report
         tools = AGENT_TOOL_MAP.get(agent, [])
         for tool_id, tool_label in tools:
             tool_node = f'T{tool_idx}'
@@ -150,68 +174,99 @@ def generate_dynamic_diagram(query: str, report: dict, agents_used: list[str] = 
 
     lines.append(f'    end')
 
-    # Report sections — show only sections that have data
-    report_node_id = None
+    # ── Agent Results (findings from each agent) ──
+    agent_findings = {
+        "research": _extract_items(report, "literature_review", max_items=2),
+        "solution": _extract_items(report, "models", max_items=2),
+        "experiment": _extract_items(report, "evaluation_plan", max_items=2),
+    }
+    finding_idx = 0
+    finding_nodes = []
+    for agent in agents_used:
+        findings = agent_findings.get(agent, [])
+        if findings:
+            for f_text in findings:
+                fid = f'F{finding_idx}'
+                finding_idx += 1
+                safe_f = _escape_mmd(f_text[:55])
+                lines.append(f'    Agent_{agent} -->|"discovers"| {fid}["{safe_f}"]:::findingNode')
+                finding_nodes.append(fid)
+
+    # ── Report Sections ──
     has_report = isinstance(report, dict) and any(report.get(k) for k in REPORT_SECTION_LABELS)
     if has_report:
-        lines.append(f'    subgraph report_box["<b>Report Sections</b>"]')
+        lines.append(f'    subgraph report_box["<b>Research Findings</b>"]')
         section_nodes = []
         for key, label in REPORT_SECTION_LABELS.items():
-            if report.get(key):
-                nid = f'S_{key}'
-                # Truncate content preview
-                raw_val = report[key]
-                if isinstance(raw_val, str):
-                    preview = raw_val[:60].replace("\n", " ")
-                elif isinstance(raw_val, (list, dict)):
-                    import json
-                    preview = json.dumps(raw_val, ensure_ascii=False)[:60]
-                else:
-                    preview = str(raw_val)[:60]
-                safe_preview = _escape_mmd(preview)
-                lines.append(f'    {nid}["<b>{label}</b>\\n{safe_preview}"]:::reportNode')
-                section_nodes.append(nid)
+            raw_val = report.get(key)
+            if not raw_val:
+                continue
+            nid = f'S_{key}'
+            if isinstance(raw_val, str):
+                preview = raw_val[:80].replace("\n", " ")
+            elif isinstance(raw_val, (list, dict)):
+                preview = json.dumps(raw_val, ensure_ascii=False)[:80]
+            else:
+                preview = str(raw_val)[:80]
+            safe_preview = _escape_mmd(preview)
+            lines.append(f'    {nid}["<b>{label}</b>\\n{safe_preview}"]:::reportNode')
+            section_nodes.append(nid)
+            for fid in finding_nodes:
+                lines.append(f'    {fid} -.-> {nid}')
         lines.append(f'    end')
 
-        # Agents return results to host, host synthesizes report
         for agent in agents_used:
             if agent in AGENT_LABELS:
                 lines.append(f'    Agent_{agent} -->|"results"| Host')
         lines.append(f'    Host -->|"synthesize"| report_box')
 
     else:
-        # No report data — just show agents returning to host
         for agent in agents_used:
             if agent in AGENT_LABELS:
                 lines.append(f'    Agent_{agent} -->|"results"| Host')
-        lines.append(f'    Host -->|"generate"| Report["<b>Report</b>"]:::reportNode')
+        lines.append(f'    Host -->|"generate"| Report["<b>Aggregated Report</b>"]:::reportNode')
 
-    # LLM backend (dashed)
-    lines.append(f'    subgraph LLM_Backend["<b>LLM Provider</b>"]')
-    lines.append(f'        LLM["LLM API"]:::llmNode')
+    # ── Datasets subsection ──
+    datasets = _extract_items(report, "datasets", label_key="name", max_items=4)
+    if datasets:
+        lines.append(f'    subgraph datasets_box["<b>Datasets &amp; Benchmarks</b>"]')
+        ds_nodes = []
+        for i, ds in enumerate(datasets):
+            dn = f'DS{i}'
+            safe_ds = _escape_mmd(ds[:60])
+            lines.append(f'    {dn}["📊 {safe_ds}"]:::datasetNode')
+            ds_nodes.append(dn)
+        lines.append(f'    end')
+        if has_report:
+            for ds_n in ds_nodes:
+                lines.append(f'    {"S_datasets" if "S_datasets" in [f"S_{k}" for k in REPORT_SECTION_LABELS] else "report_box"} -.-> {ds_n}')
+
+    # ── LLM Backend ──
+    lines.append(f'    subgraph LLM_Backend["<b>LLM Backend</b>"]')
+    lines.append(f'        LLM["Gemini 2.5 / OpenAI / Anthropic"]:::llmNode')
     lines.append(f'    end')
     for agent in agents_used:
         if agent in AGENT_LABELS:
             lines.append(f'    Agent_{agent} -.->|"call_llm()"| LLM')
     lines.append(f'    Host -.->|"call_llm()"| LLM')
 
-    # Progress events as timeline (if provided)
+    # ── Execution Timeline ──
     if events and len(events) > 1:
         lines.append(f'    subgraph timeline_box["<b>Execution Timeline</b>"]')
         prev_ev = None
-        for i, ev in enumerate(events[:8]):  # limit to 8 steps
+        for i, ev in enumerate(events[:10]):
             step = ev.get("step", f"step_{i}")
             status = ev.get("status", "")
-            safe_step = _escape_mmd(step[:40])
+            safe_step = _escape_mmd(step[:50])
             nid = f'Ev{i}'
-            status_icon = "✅" if status == "complete" else "⏳" if status == "running" else "❌" if status == "error" else "•"
+            status_icon = "✅" if status == "complete" else "⏳" if status == "running" else "❌" if status == "error" else "▸"
             lines.append(f'    {nid}["{status_icon} {safe_step}"]:::timelineNode')
             if prev_ev:
                 lines.append(f'    {prev_ev} --> {nid}')
             prev_ev = nid
         lines.append(f'    end')
 
-    # Style definitions
+    # ── Style definitions ──
     lines.append(f'    classDef userNode fill:{SUBGRAPH_COLORS["user"]},stroke:{AGENT_COLORS["user"]},stroke-width:3px,color:#333')
     lines.append(f'    classDef hostNode fill:{SUBGRAPH_COLORS["agents"]},stroke:{AGENT_COLORS["host"]},stroke-width:3px,color:#333')
     lines.append(f'    classDef researchNode fill:#E8EAF6,stroke:{AGENT_COLORS["research"]},stroke-width:2px,color:#333')
@@ -219,6 +274,8 @@ def generate_dynamic_diagram(query: str, report: dict, agents_used: list[str] = 
     lines.append(f'    classDef experimentNode fill:#E8EAF6,stroke:{AGENT_COLORS["experiment"]},stroke-width:2px,color:#333')
     lines.append(f'    classDef toolNode fill:{SUBGRAPH_COLORS["tools"]},stroke:#2ECC71,stroke-width:2px,color:#333')
     lines.append(f'    classDef reportNode fill:{SUBGRAPH_COLORS["llm"]},stroke:#E74C3C,stroke-width:2px,color:#333')
+    lines.append(f'    classDef findingNode fill:#E3F2FD,stroke:#1565C0,stroke-width:1.5px,color:#333')
+    lines.append(f'    classDef datasetNode fill:#E8F5E9,stroke:#2E7D32,stroke-width:1.5px,color:#333')
     lines.append(f'    classDef llmNode fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#333')
     lines.append(f'    classDef timelineNode fill:#FFF8E1,stroke:#FF9800,stroke-width:1px,color:#333')
 

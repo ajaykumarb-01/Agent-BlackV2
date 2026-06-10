@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Download, ZoomIn, ZoomOut, Maximize2, Minimize2, Workflow, Loader2, BarChart3, RefreshCw } from "lucide-react";
+import { Download, ZoomIn, ZoomOut, Maximize2, Minimize2, Workflow, Loader2, RefreshCw, ImageDown } from "lucide-react";
 import { api } from "@/lib/api";
-import { MermaidDiagram } from "@/components/shared/MermaidDiagram";
+import { MermaidDiagram, type MermaidDiagramHandle } from "@/components/shared/MermaidDiagram";
 import { useAppStore } from "@/lib/store";
 
 export const Route = createFileRoute("/diagram")({
@@ -19,7 +19,9 @@ function DiagramPage() {
   const [loading, setLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
+  const [downloadPngBusy, setDownloadPngBusy] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const diagramRef = useRef<MermaidDiagramHandle>(null);
 
   const messages = useAppStore((s) => s.messages);
 
@@ -101,6 +103,18 @@ function DiagramPage() {
   const zoomOut = useCallback(() => setZoom((z) => Math.max(0.2, z - 0.2)), []);
   const zoomLabel = `${Math.round(zoom * 100)}%`;
 
+  const handleDownloadPng = useCallback(async () => {
+    if (!diagramRef.current) return;
+    setDownloadPngBusy(true);
+    try {
+      await diagramRef.current.downloadPng(`${tab.toLowerCase().replace(/\s+/g, "-")}-diagram.png`);
+    } catch (err) {
+      console.error("PNG download failed:", err);
+    } finally {
+      setDownloadPngBusy(false);
+    }
+  }, [tab]);
+
   return (
     <div className="mx-auto w-full max-w-[1100px] px-3 py-4 sm:px-4 sm:py-6 flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -146,7 +160,7 @@ function DiagramPage() {
           </div>
         ) : diagram ? (
           <div className="h-full w-full p-6">
-            <MermaidDiagram code={diagram} zoom={zoom} onZoomChange={setZoom} />
+            <MermaidDiagram ref={diagramRef} code={diagram} zoom={zoom} onZoomChange={setZoom} />
           </div>
         ) : (
           <div className="text-center">
@@ -184,6 +198,16 @@ function DiagramPage() {
             </IconBtn>
             <span className="mx-1 h-5 w-px bg-border" />
             <IconBtn
+              onClick={handleDownloadPng}
+              title="Download PNG"
+            >
+              {downloadPngBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ImageDown className="h-4 w-4" />
+              )}
+            </IconBtn>
+            <IconBtn
               onClick={() => {
                 const blob = new Blob([diagram], { type: "text/plain" });
                 const url = URL.createObjectURL(blob);
@@ -193,7 +217,7 @@ function DiagramPage() {
                 a.click();
                 URL.revokeObjectURL(url);
               }}
-              title="Download .mmd"
+              title="Download .mmd (source)"
             >
               <Download className="h-4 w-4" />
             </IconBtn>
