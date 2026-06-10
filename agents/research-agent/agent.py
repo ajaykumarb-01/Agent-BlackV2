@@ -16,7 +16,8 @@ def load_system_prompt() -> str:
         return f.read()
 
 async def run_agent(query: str) -> dict:
-    tool_list = list(TOOLS.keys())
+    from tools import TASKS as _TASKS
+    tool_list = _TASKS
 
     # Step 1: LLM selects tools (async, non-blocking)
     system_prompt = load_system_prompt().format(tool_list=tool_list)

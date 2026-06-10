@@ -7,18 +7,12 @@ from shared.models import AgentRequest, AgentResponse
 from shared.mcp import handle_mcp_request, MCP_TOOLS
 from shared.a2a_sdk import add_sdk_a2a_routes, agent_card_to_legacy_dict, build_agent_card
 from shared.config import RESEARCH_AGENT_URL
+from tools import TASKS
 from agent import run_agent
 
 app = FastAPI(title="Computer Vision Research Agent")
 
 AGENT_NAME = "Computer Vision Research Agent"
-TASKS = [
-    "paper_search", "paper_summarization", "research_gap_analysis",
-    "cv_dataset_recommendation", "cv_model_recommendation",
-    "citation_generation", "benchmark_search", "eval_metric_advisor",
-    "architecture_comparison", "synthetic_data_strategy",
-    "solution_recommendation", "prototype_guidance", "experiment_planning",
-]
 
 CAPABILITIES = {
     "name": AGENT_NAME,

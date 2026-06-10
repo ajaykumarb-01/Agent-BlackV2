@@ -16,7 +16,8 @@ def load_system_prompt() -> str:
         return f.read()
 
 async def run_agent(query: str) -> dict:
-    tool_list = list(TOOLS.keys())
+    from tools import TASKS as _TASKS
+    tool_list = _TASKS
     system_prompt = load_system_prompt().format(tool_list=tool_list)
     decision_raw = await async_call_llm(system_prompt=system_prompt, user_prompt=query)
     decision = extract_json(decision_raw)

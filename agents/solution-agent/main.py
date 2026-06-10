@@ -7,18 +7,12 @@ from shared.models import AgentRequest, AgentResponse
 from shared.mcp import handle_mcp_request, MCP_TOOLS
 from shared.a2a_sdk import add_sdk_a2a_routes, agent_card_to_legacy_dict, build_agent_card
 from shared.config import SOLUTION_AGENT_URL
+from tools import TASKS
 from agent import run_agent
 
 app = FastAPI(title="NLP Solution Agent")
 
 AGENT_NAME = "NLP Solution Agent"
-TASKS = [
-    "paper_search", "paper_summarization", "nlp_dataset_recommendation",
-    "rag_architecture_design", "llm_benchmarking",
-    "citation_generation", "prompt_optimization", "information_extraction",
-    "eval_metric_advisor", "research_gap_analysis",
-    "solution_recommendation", "prototype_guidance", "experiment_planning",
-]
 
 CAPABILITIES = {
     "name": AGENT_NAME,

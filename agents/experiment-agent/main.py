@@ -7,19 +7,12 @@ from shared.models import AgentRequest, AgentResponse
 from shared.mcp import handle_mcp_request, MCP_TOOLS
 from shared.a2a_sdk import add_sdk_a2a_routes, agent_card_to_legacy_dict, build_agent_card
 from shared.config import EXPERIMENT_AGENT_URL
+from tools import TASKS
 from agent import run_agent
 
 app = FastAPI(title="ML Experiment Agent")
 
 AGENT_NAME = "ML Experiment Agent"
-TASKS = [
-    "paper_search", "experiment_planning", "metric_recommendation",
-    "hyperparameter_advice", "model_recommendation",
-    "benchmark_search", "feature_engineering_advisor",
-    "model_explainability_advisor", "time_series_strategy",
-    "research_gap_analysis", "paper_summarization",
-    "solution_recommendation", "prototype_guidance",
-]
 
 CAPABILITIES = {
     "name": AGENT_NAME,

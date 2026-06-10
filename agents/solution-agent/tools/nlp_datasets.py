@@ -1,14 +1,14 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-from shared.llm import call_llm, extract_json
-import json
+from shared.datasets import search_datasets
 
-def find_nlp_datasets(query: str = "", topic: str = "", **kwargs) -> dict:
-    topic_name = topic or query
-    prompt = f"""Given the NLP research topic, recommend relevant datasets. Return ONLY valid JSON with:
-- domain (the NLP subdomain)
-- datasets (list of 3-6 dataset names with brief descriptions)
-- suggested_use (string explaining which dataset fits which use case)
-Topic: {topic_name}"""
-    raw = call_llm(system_prompt="You are an NLP datasets expert.", user_prompt=prompt)
-    return extract_json(raw)
+
+def find_nlp_datasets(
+    query: str = "",
+    topic: str = "",
+    domain: str = "nlp",
+    task: str = "",
+    max_results: int = 10,
+    sources: list | None = None,
+) -> dict:
+    return search_datasets(query=query, topic=topic, domain=domain, task=task, max_results=max_results, sources=sources)
