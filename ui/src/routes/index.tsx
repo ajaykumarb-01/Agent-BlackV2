@@ -5,6 +5,7 @@ import { InputArea } from "@/components/chat/InputArea";
 import { StatusBar } from "@/components/chat/StatusBar";
 import { useAppStore, type Message, type TaskEvent } from "@/lib/store";
 import { api, type HistoryItem } from "@/lib/api";
+import { generateId } from "@/lib/utils";
 import { Trash2, MessageSquarePlus } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -246,12 +247,12 @@ function ChatPage() {
     clearMessages();
     setChatLocked(false);
     const userMsg: Message = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       role: "user",
       content: text,
       timestamp: Date.now(),
     };
-    const placeholderId = crypto.randomUUID();
+    const placeholderId = generateId();
     const placeholder: Message = {
       id: placeholderId,
       role: "assistant",
