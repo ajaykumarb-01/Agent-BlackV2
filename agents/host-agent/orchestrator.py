@@ -363,7 +363,7 @@ async def _orchestrate_inner(query: str, progress_callback) -> dict:
         progress_callback(
             name,
             "running",
-            f"Calling {name} with {len(tools)} pre-selected tool(s)...",
+            json.dumps({"tools": tools, "message": f"Calling {name} with {len(tools)} pre-selected tool(s)..."}),
         )
         try:
             result = await send_text_task(base_url, envelope)

@@ -403,6 +403,7 @@ function About() {
             </Link>
             <Link
               to="/"
+              search={{ new: "1" }}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-hover px-5 py-2.5 text-sm font-medium hover:bg-surface-hover/80 transition-colors"
             >
               <MessageSquare className="h-4 w-4" />

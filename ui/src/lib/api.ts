@@ -151,6 +151,20 @@ export interface SetupStatus {
   steps: { step: string; completed: boolean; completed_at?: number }[];
 }
 
+export interface LogEntry {
+  time: string;
+  level: string;
+  message: string;
+  service: string;
+}
+
+export interface LogsResponse {
+  entries: LogEntry[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
 export const api = {
   status: () => request<SystemStatus>("/status"),
   agentStats: () => request<AgentStats>("/agents/stats"),
@@ -250,6 +264,18 @@ export const api = {
   getAgentCard: (key: string) => request<AgentCardResponse>(`/agents/${key}/card`),
   getAgentLogs: (name: string) =>
     request<{ name: string; stdout: string; stderr: string }>(`/agents/${name}/logs`),
+
+  getLogs: (params?: { level?: string; service?: string; search?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.level) q.set("level", params.level);
+    if (params?.service) q.set("service", params.service);
+    if (params?.search) q.set("search", params.search);
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.offset) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return request<LogsResponse>(`/logs${qs ? `?${qs}` : ""}`);
+  },
+  getLogFiles: () => request<{ files: { service: string; size_bytes: number }[] }>("/logs/files"),
 
   startAgents: () => request<any>("/agents/start", { method: "POST" }),
   stopAgents: () => request<any>("/agents/stop", { method: "POST" }),

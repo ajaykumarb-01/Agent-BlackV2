@@ -7,6 +7,7 @@ import {
   Settings,
   Info,
   X,
+  ScrollText,
 } from "lucide-react";
 import { useEffect, useRef, useCallback } from "react";
 import { useAppStore } from "@/lib/store";
@@ -16,6 +17,7 @@ const items = [
   { to: "/", label: "Chat", icon: MessageSquare, search: { new: "1" as const } },
   { to: "/history", label: "History", icon: History },
   { to: "/agents", label: "Agents", icon: Boxes },
+  { to: "/logs", label: "Logs", icon: ScrollText },
   { to: "/settings", label: "Settings", icon: Settings },
   { to: "/about", label: "About", icon: Info },
 ] as const;

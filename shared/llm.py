@@ -4,6 +4,8 @@ import asyncio
 import time
 import logging
 
+import anthropic
+
 from shared.config import get_setting
 
 logger = logging.getLogger(__name__)

@@ -13,20 +13,24 @@ from starlette.middleware.base import BaseHTTPMiddleware
 LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
-logger = logging.getLogger("agent-black")
-logger.setLevel(logging.INFO)
-
 _fmt = logging.Formatter("%(asctime)s  %(levelname)-7s  %(message)s", datefmt="%H:%M:%S")
 
-# Console handler (visible in terminal via stderr)
-_sh = logging.StreamHandler(sys.stderr)
-_sh.setFormatter(_fmt)
-logger.addHandler(_sh)
+# Root logger: DEBUG level, writes all levels to file
+_root = logging.getLogger()
+_root.setLevel(logging.DEBUG)
 
-# File handler (persistent log)
 _fh = logging.FileHandler(os.path.join(LOG_DIR, "control-panel-app.log"), encoding="utf-8")
+_fh.setLevel(logging.DEBUG)
 _fh.setFormatter(_fmt)
-logger.addHandler(_fh)
+_root.addHandler(_fh)
+
+# Console: INFO and above only
+_sh = logging.StreamHandler(sys.stderr)
+_sh.setLevel(logging.INFO)
+_sh.setFormatter(_fmt)
+_root.addHandler(_sh)
+
+logger = logging.getLogger("agent-black")
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -51,6 +55,7 @@ from app.routes.settings import router as settings_router
 from app.routes.diagram import router as diagram_router
 from app.routes.discovery import router as discovery_router
 from app.routes.setup import router as setup_router
+from app.routes.logs import router as logs_router
 from app.database import init_db
 
 init_db()
@@ -72,12 +77,13 @@ app.include_router(settings_router, prefix="/api")
 app.include_router(diagram_router, prefix="/api")
 app.include_router(discovery_router, prefix="/api")
 app.include_router(setup_router, prefix="/api")
+app.include_router(logs_router, prefix="/api")
 
 
 @app.on_event("startup")
 def on_startup():
     logger.info("Agent Black Control Panel starting up")
-    logger.info(f"Routes: /api/status, /api/query, /api/settings, /api/setup/step, /api/diagram/*")
+    logger.info(f"Routes: /api/status, /api/query, /api/settings, /api/setup/step, /api/diagram/*, /api/logs")
 
 
 @app.get("/health")

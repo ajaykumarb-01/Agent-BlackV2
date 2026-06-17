@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from "react";
 import { type TaskEvent } from "@/lib/store";
 import {
   Check,
@@ -8,6 +9,7 @@ import {
   Network,
   Wrench,
   Zap,
+  Timer,
 } from "lucide-react";
 
 const stepMeta: Record<
@@ -16,6 +18,8 @@ const stepMeta: Record<
 > = {
   submitted: { label: "Query submitted", group: "orchestrator" },
   validating_query: { label: "Validating query", group: "orchestrator" },
+  discovering_agents: { label: "Discovering agents", group: "orchestrator" },
+  routing: { label: "Routing to agents", group: "orchestrator" },
   selecting_agents: { label: "Selecting agents", group: "orchestrator" },
   decomposing_task: { label: "Decomposing task", group: "orchestrator" },
   aggregating: { label: "Aggregating results", group: "output" },
@@ -75,6 +79,95 @@ function parseToolsUsed(events: TaskEvent[], agentName: string): string[] {
   }
 }
 
+function parseRoutingDetail(detail: string): { agents?: string[]; reasoning?: string } | null {
+  try {
+    const parsed = JSON.parse(detail);
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.agents)) {
+      return parsed;
+    }
+  } catch {}
+  return null;
+}
+
+function parseRunningTools(detail: string): string[] {
+  try {
+    const parsed = JSON.parse(detail);
+    if (parsed && Array.isArray(parsed.tools)) {
+      return parsed.tools.filter((t: unknown) => typeof t === "string");
+    }
+  } catch {}
+  return [];
+}
+
+function formatElapsed(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (min > 0) return `${min}m ${sec}s`;
+  return `${sec}s`;
+}
+
+function toMs(ts: number): number {
+  return ts < 1e12 ? ts * 1000 : ts;
+}
+
+function ElapsedTimer({ events }: { events: TaskEvent[] }) {
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef<number>(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (events.length === 0) return;
+
+    const firstTs = events.reduce((min, e) => Math.min(min, toMs(e.timestamp)), Infinity);
+    startRef.current = firstTs;
+
+    const tick = () => {
+      setElapsed(Date.now() - startRef.current);
+    };
+    tick();
+    intervalRef.current = setInterval(tick, 200);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [events]);
+
+  const isRunning = events.some((e) => e.status === "running");
+  const isComplete = events.some((e) => e.step === "aggregating" && e.status === "complete");
+
+  useEffect(() => {
+    if (isComplete && intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, [isComplete]);
+
+  if (isComplete) {
+    const lastEvent = events.find((e) => e.step === "aggregating" && e.status === "complete");
+    if (lastEvent) {
+      const totalMs = toMs(lastEvent.timestamp) - startRef.current;
+      return (
+        <span className="ml-auto flex items-center gap-1 text-[10px] font-mono text-emerald-400">
+          <Timer className="h-2.5 w-2.5" />
+          {formatElapsed(totalMs)}
+        </span>
+      );
+    }
+  }
+
+  if (!isRunning && events.length > 0) {
+    return null;
+  }
+
+  return (
+    <span className="ml-auto flex items-center gap-1 text-[10px] font-mono text-blue-400">
+      <Timer className="h-2.5 w-2.5" />
+      {formatElapsed(elapsed)}
+    </span>
+  );
+}
+
 function ToolPill({ name, delay }: { name: string; delay: number }) {
   const displayName = name.replace(/_/g, " ");
   return (
@@ -103,6 +196,8 @@ function orderSteps(steps: string[]): string[] {
   const order = [
     "submitted",
     "validating_query",
+    "discovering_agents",
+    "routing",
     "selecting_agents",
     "decomposing_task",
     "aggregating",
@@ -112,6 +207,35 @@ function orderSteps(steps: string[]): string[] {
     const bi = order.indexOf(b);
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
+}
+
+function ActiveToolsIndicator({ agentEvents }: { agentEvents: TaskEvent[] }) {
+  const activeTools: { agent: string; tool: string }[] = [];
+  for (const ev of agentEvents) {
+    if (ev.status === "running") {
+      const tools = parseRunningTools(ev.detail);
+      const agentLabel = stepMeta[ev.step]?.label || ev.step;
+      for (const t of tools) {
+        activeTools.push({ agent: agentLabel, tool: t });
+      }
+    }
+  }
+  if (activeTools.length === 0) return null;
+  return (
+    <div className="mt-2 flex items-center gap-1.5 rounded-md border border-blue-500/20 bg-blue-500/5 px-2 py-1">
+      <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+      <span className="text-[10px] font-medium text-blue-300">
+        Invoking:{" "}
+        {activeTools.map((at, i) => (
+          <span key={at.tool}>
+            {i > 0 && " + "}
+            <span className="text-blue-200">{at.tool.replace(/_/g, " ")}</span>
+            <span className="text-blue-400/60"> on {at.agent}</span>
+          </span>
+        ))}
+      </span>
+    </div>
+  );
 }
 
 export function TaskProgress({ events }: { events: TaskEvent[] }) {
@@ -155,8 +279,9 @@ export function TaskProgress({ events }: { events: TaskEvent[] }) {
       <div className="mb-2 flex items-center gap-2 text-[11px] font-medium text-text-muted uppercase tracking-wider">
         <Network className="h-3 w-3" />
         A2A Agent Pipeline
+        <ElapsedTimer events={events} />
         {totalToolsUsed > 0 && (
-          <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0 text-emerald-400">
+          <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0 text-emerald-400">
             <Zap className="h-2.5 w-2.5" />
             {totalToolsUsed} MCP tools
           </span>
@@ -169,6 +294,9 @@ export function TaskProgress({ events }: { events: TaskEvent[] }) {
         <div className="space-y-0.5">
           {orchestratorEvents.map((ev) => {
             const meta = stepMeta[ev.step];
+            const routingInfo = ev.step === "routing" && ev.status === "complete"
+              ? parseRoutingDetail(ev.detail)
+              : null;
             return (
               <div key={ev.step} className="relative flex items-center gap-2 pl-0">
                 <div className="relative z-10 flex h-4 w-4 items-center justify-center rounded-full bg-surface">
@@ -188,6 +316,16 @@ export function TaskProgress({ events }: { events: TaskEvent[] }) {
                 {ev.status === "running" && (
                   <span className="ml-1 animate-pulse text-[10px] text-text-muted">
                     ...
+                  </span>
+                )}
+                {routingInfo && routingInfo.agents && routingInfo.agents.length > 0 && (
+                  <span className="ml-1 text-[10px] text-text-muted">
+                    → {routingInfo.agents.join(", ")}
+                  </span>
+                )}
+                {!routingInfo && ev.status === "complete" && ev.detail && ev.step !== "routing" && (
+                  <span className="ml-1 text-[10px] text-text-muted truncate max-w-[300px]">
+                    {ev.detail.length > 60 ? ev.detail.slice(0, 60) + "..." : ev.detail}
                   </span>
                 )}
               </div>
@@ -291,6 +429,8 @@ export function TaskProgress({ events }: { events: TaskEvent[] }) {
             })}
           </div>
         )}
+
+        <ActiveToolsIndicator agentEvents={agentEvents} />
       </div>
     </div>
   );

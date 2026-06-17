@@ -16,7 +16,7 @@ AGENTS = [
     {"name": "solution-agent", "port": 8002, "dir": os.path.join("agents", "solution-agent")},
     {"name": "experiment-agent", "port": 8003, "dir": os.path.join("agents", "experiment-agent")},
     # host-agent is not started as a separate process here because the
-    # control panel (port 8000) imports andcd runs the orchestrator in-process.
+    # control panel (port 8000) imports and cd runs the orchestrator in-process.
 ]
 
 processes = []
