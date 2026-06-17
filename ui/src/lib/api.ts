@@ -280,21 +280,22 @@ export const api = {
   startAgents: () => request<any>("/agents/start", { method: "POST" }),
   stopAgents: () => request<any>("/agents/stop", { method: "POST" }),
 
-  getDiagramAgentFlow: (query?: string) =>
+  getDiagramAgentFlow: (data?: { query?: string; report?: Record<string, any>; agents_used?: string[]; events?: any[] }) =>
     request<{ diagram: string; description: string }>("/diagram/agent-flow", {
       method: "POST",
-      body: JSON.stringify({ query: query || "" }),
+      body: JSON.stringify(data || { query: "" }),
     }),
-  getDiagramTechStack: () =>
+  getDiagramTechStack: (data?: { report?: Record<string, any> }) =>
     request<{ diagram: string; description: string }>("/diagram/tech-stack", {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify(data || {}),
     }),
   getDiagramFromReport: (data: {
     query: string;
     report: Record<string, any>;
     agents_used?: string[];
     events?: { step: string; status: string; detail: string; timestamp: number }[];
+    raw?: Record<string, any>;
   }) =>
     request<{ diagram: string; description: string }>("/diagram/from-report", {
       method: "POST",

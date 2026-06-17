@@ -41,35 +41,54 @@ function DiagramPage() {
     setDiagram("");
     setDescription("");
     try {
-      if (tab === "Project Flow" && latestReport) {
-        // Dynamic diagram based on actual report
-        const reportData: Record<string, any> = {};
-        if (latestReport.sections) {
-          for (const [k, v] of Object.entries(latestReport.sections)) {
-            if (v) {
-              try { reportData[k] = JSON.parse(v); } catch { reportData[k] = v; }
-            }
+      // Build report data from latest assistant message
+      const reportData: Record<string, any> = {};
+      if (latestReport?.sections) {
+        for (const [k, v] of Object.entries(latestReport.sections)) {
+          if (v) {
+            try { reportData[k] = typeof v === "string" ? JSON.parse(v) : v; } catch { reportData[k] = v; }
           }
         }
-        const userMsg = messages.find(
-          (m) => m.role === "user" && m.timestamp <= (latestReport?.timestamp || Infinity)
-        );
-        const queryText = userMsg?.content || "research query";
+      }
+      // Include tech_stack and tools_used from raw data
+      const raw = (latestReport?.raw as Record<string, any>) || {};
+      if (raw?.report?.tech_stack) {
+        reportData.tech_stack = raw.report.tech_stack;
+      }
+      if (raw?.report?.tools_used) {
+        reportData.tools_used = raw.report.tools_used;
+      }
+
+      const userMsg = messages.find(
+        (m) => m.role === "user" && m.timestamp <= (latestReport?.timestamp || Infinity),
+      );
+      const queryText = userMsg?.content || "";
+      const agentsUsed = latestReport?.agentsUsed || [];
+      const events = latestReport?.taskProgress || [];
+
+      if (tab === "Project Flow" && latestReport) {
         const res = await api.getDiagramFromReport({
-          query: queryText,
+          query: queryText || "research query",
           report: reportData,
-          agents_used: latestReport.agentsUsed || [],
-          events: latestReport.taskProgress || [],
+          agents_used: agentsUsed,
+          events,
+          raw: raw || undefined,
         });
         setDiagram(res.diagram);
         setDescription(res.description);
       } else if (tab === "Tech Stack") {
-        const res = await api.getDiagramTechStack();
+        const res = await api.getDiagramTechStack({
+          report: latestReport ? reportData : undefined,
+        });
         setDiagram(res.diagram);
         setDescription(res.description);
       } else {
-        // Architecture — static agent flow (no report)
-        const res = await api.getDiagramAgentFlow();
+        const res = await api.getDiagramAgentFlow({
+          query: queryText,
+          report: latestReport ? reportData : undefined,
+          agents_used: latestReport ? agentsUsed : undefined,
+          events: latestReport ? events : undefined,
+        });
         setDiagram(res.diagram);
         setDescription(res.description);
       }

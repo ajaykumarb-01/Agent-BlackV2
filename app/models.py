@@ -64,6 +64,9 @@ class TechStackResponse(BaseModel):
 
 class DiagramRequest(BaseModel):
     query: Optional[str] = None
+    report: Optional[dict[str, Any]] = None
+    agents_used: Optional[list[str]] = None
+    events: Optional[list[dict[str, Any]]] = None
     include_tech_stack: bool = True
     format: str = "mermaid"
 
@@ -73,6 +76,7 @@ class DiagramFromReportRequest(BaseModel):
     report: dict[str, Any]
     agents_used: list[str] = []
     events: list[dict[str, Any]] = []
+    raw: Optional[dict[str, Any]] = None
 
 
 class ReportPdfRequest(BaseModel):
