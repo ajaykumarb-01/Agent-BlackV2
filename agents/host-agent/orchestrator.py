@@ -3,14 +3,17 @@ import asyncio
 import logging
 import sys
 import os
+import time
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import httpx
 from shared.a2a_sdk import send_text_task
 from shared.discovery import discover_agents, render_catalog
 from shared.llm import async_call_llm, extract_json
+from shared.logging_setup import LogTimer
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("orchestrator")
 
 DECOMPOSE_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "orchestrator.txt")
 SELECTION_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "selection.txt")
@@ -189,18 +192,6 @@ def _build_routing_prompt(catalog_text: str, query: str) -> str:
 
 
 def _parse_routing_decision(raw: str) -> dict:
-    """Parse the orchestrator's routing LLM response into a normalized structure.
-
-    Expected shape:
-        {
-          "selected_agents": [
-            {"name": "research", "tools": ["search_papers"], "sub_query": "..."}
-          ],
-          "reasoning": "..."
-        }
-    Returns:
-        {"selected_agents": [...], "reasoning": "..."}
-    """
     try:
         parsed = extract_json(raw)
     except Exception as e:
@@ -238,27 +229,29 @@ def _parse_routing_decision(raw: str) -> dict:
 
 def _filter_routing_against_catalog(
     routing: dict, catalog: list[dict]
-) -> tuple[list[dict], list[str]]:
-    """Drop entries whose agent or tools don't exist in the live catalog.
-
-    Returns (valid_entries, drop_reasons).
-    """
+) -> tuple[list[dict], list[str], list[str]]:
     catalog_by_name = {a["name"]: a for a in catalog}
     valid: list[dict] = []
     drops: list[str] = []
+    offline_agents: list[str] = []
     for entry in routing.get("selected_agents", []):
         name = entry["name"]
         if name not in catalog_by_name:
             drops.append(f"unknown agent '{name}'")
             continue
-        available_tools = {t["name"] for t in catalog_by_name[name].get("tools", [])}
+        agent = catalog_by_name[name]
+        if not agent.get("online", True):
+            drops.append(f"agent '{name}' is offline")
+            offline_agents.append(name)
+            continue
+        available_tools = {t["name"] for t in agent.get("tools", [])}
         requested_tools = entry.get("tools", []) or []
         kept_tools = [t for t in requested_tools if t in available_tools]
         dropped_tools = [t for t in requested_tools if t not in available_tools]
         for t in dropped_tools:
             drops.append(f"tool '{t}' not on agent '{name}'")
         valid.append({**entry, "name": name, "tools": kept_tools})
-    return valid, drops
+    return valid, drops, offline_agents
 
 
 async def orchestrate(query: str, progress_callback=None) -> dict:
@@ -269,6 +262,7 @@ async def orchestrate(query: str, progress_callback=None) -> dict:
         return await _orchestrate_inner(query, progress_callback)
     except Exception as e:
         progress_callback("orchestrator", "error", f"Orchestration failed: {e}")
+        logger.exception("Orchestration failed: %s", e)
         return {
             "error": str(e),
             "tech_stack": [],
@@ -281,25 +275,67 @@ async def orchestrate(query: str, progress_callback=None) -> dict:
 
 
 async def _orchestrate_inner(query: str, progress_callback) -> dict:
+    logger.info("=" * 60)
+    logger.info("ORCHESTRATION START  query=%s", query[:200])
 
     # ── Step 0: Research-relevance gate ────────────────────────────────────────
-    progress_callback("validating_query", "running", "Checking if query is research-related...")
-    validation = await validate_research_query(query)
+    logger.info("[Step 0] Validating research relevance...")
+    with LogTimer(logger, "validation"):
+        progress_callback("validating_query", "running", "Checking if query is research-related...")
+        validation = await validate_research_query(query)
+
     if not validation.get("is_research"):
         reason = str(validation.get("reason") or NOT_RESEARCH_RESPONSE["message"])
+        logger.info(
+            "[Step 0] Query REJECTED  method=%s  reason=%s",
+            validation.get("method"),
+            reason[:200],
+        )
         progress_callback("validating_query", "complete", f"Query rejected: {reason}")
         return _build_not_research_response(reason, validation)
+
+    logger.info(
+        "[Step 0] Query ACCEPTED  method=%s  reason=%s",
+        validation.get("method"),
+        validation.get("reason", "")[:200],
+    )
     progress_callback("validating_query", "complete", "Query is research-related")
 
     # ── Step 1: Live agent + tool discovery ───────────────────────────────────
+    logger.info("[Step 1] Discovering live agents and their tools...")
     progress_callback("discovering_agents", "running", "Discovering live agents and their tools...")
-    catalog = await discover_agents()
+    with LogTimer(logger, "agent_discovery"):
+        catalog = await discover_agents()
+
     if not catalog:
+        logger.warning("[Step 1] No agents are reachable")
         progress_callback("discovering_agents", "error", "No agents are reachable")
         return {
             "error": "no_agents_available",
             "message": "No specialist agents responded to discovery. Check that the 3 agent services are running on :8001/:8002/:8003.",
         }
+
+    # Log each discovered agent with IP/port/tools
+    online_count = sum(1 for a in catalog if a.get("online", True))
+    for agent in catalog:
+        status = "ONLINE" if agent.get("online", True) else "OFFLINE"
+        tool_names = [t["name"] for t in agent.get("tools", [])]
+        logger.info(
+            "[Step 1] Agent discovered  name=%s  status=%s  url=%s  port=%s  tools=%d  tool_list=%s",
+            agent["name"],
+            status,
+            agent.get("url", "N/A"),
+            agent.get("port", "N/A"),
+            len(tool_names),
+            tool_names,
+        )
+
+    logger.info(
+        "[Step 1] Discovery complete  total=%d  online=%d  agents=%s",
+        len(catalog),
+        online_count,
+        [a["name"] for a in catalog],
+    )
     progress_callback(
         "discovering_agents",
         "complete",
@@ -307,29 +343,52 @@ async def _orchestrate_inner(query: str, progress_callback) -> dict:
     )
 
     # ── Step 2: LLM picks agents + tools from the live catalog ────────────────
+    logger.info("[Step 2] LLM routing — selecting agents and tools...")
     progress_callback("routing", "running", "LLM is selecting agents and tools...")
-    try:
-        catalog_text = render_catalog(catalog)
-        routing_prompt = _build_routing_prompt(catalog_text, query)
-        routing_raw = await async_call_llm(
-            system_prompt="You are a research routing orchestrator. Output ONLY valid JSON. No prose, no markdown.",
-            user_prompt=routing_prompt,
-            json_mode=True,
-        )
-        routing = _parse_routing_decision(routing_raw)
-    except Exception as e:
-        progress_callback("routing", "error", f"Routing LLM call failed: {e}")
-        return {
-            "error": "routing_failed",
-            "message": "The orchestrator's routing LLM call failed.",
-            "reason": str(e),
-        }
+    with LogTimer(logger, "llm_routing"):
+        try:
+            catalog_text = render_catalog(catalog)
+            routing_prompt = _build_routing_prompt(catalog_text, query)
+            routing_raw = await async_call_llm(
+                system_prompt="You are a research routing orchestrator. Output ONLY valid JSON. No prose, no markdown.",
+                user_prompt=routing_prompt,
+                json_mode=True,
+            )
+            routing = _parse_routing_decision(routing_raw)
+        except Exception as e:
+            logger.error("[Step 2] Routing LLM call failed: %s", e)
+            progress_callback("routing", "error", f"Routing LLM call failed: {e}")
+            return {
+                "error": "routing_failed",
+                "message": "The orchestrator's routing LLM call failed.",
+                "reason": str(e),
+            }
 
-    selected, drop_reasons = _filter_routing_against_catalog(routing, catalog)
+    # Log raw routing decision
+    logger.info(
+        "[Step 2] LLM raw decision  agents_requested=%s  reasoning=%s",
+        [a["name"] for a in routing.get("selected_agents", [])],
+        routing.get("reasoning", "")[:300],
+    )
+
+    # Filter against live catalog and log drops
+    selected, drop_reasons, offline_agents = _filter_routing_against_catalog(routing, catalog)
     if drop_reasons:
-        logger.info("Routing drops: %s", drop_reasons)
+        for drop in drop_reasons:
+            logger.warning("[Step 2] Routing drop: %s", drop)
 
     if not selected:
+        if offline_agents:
+            names = ", ".join(offline_agents)
+            logger.warning("[Step 2] Required agents OFFLINE: %s", names)
+            msg = f"The correct agent(s) for this query ({names}) are currently offline."
+            progress_callback("routing", "complete", msg)
+            return {
+                "error": "no_suitable_agent",
+                "message": f"No suitable agent available. The required agent(s) ({names}) are offline. Please start the agent service(s) and try again.",
+                "routing": routing,
+            }
+        logger.info("[Step 2] No agents selected for this query")
         progress_callback("routing", "complete", "No agents selected for this query")
         not_research = _build_not_research_response(
             routing.get("reasoning") or "No agent is relevant for this query."
@@ -337,8 +396,25 @@ async def _orchestrate_inner(query: str, progress_callback) -> dict:
         not_research["routing"] = routing
         return not_research
 
+    # Log final selected agents with IP, port, and MCP tools
     selected_names = [s["name"] for s in selected]
     reasoning = routing.get("reasoning", "")
+    for s in selected:
+        agent_info = next((a for a in catalog if a["name"] == s["name"]), {})
+        logger.info(
+            "[Step 2] Agent SELECTED  name=%s  url=%s  port=%s  mcp_tools=%s  sub_query=%s",
+            s["name"],
+            agent_info.get("url", "N/A"),
+            agent_info.get("port", "N/A"),
+            s.get("tools", []),
+            (s.get("sub_query") or "N/A")[:150],
+        )
+
+    logger.info(
+        "[Step 2] Routing complete  selected=%s  reasoning=%s",
+        selected_names,
+        reasoning[:300],
+    )
     progress_callback(
         "routing",
         "complete",
@@ -346,11 +422,20 @@ async def _orchestrate_inner(query: str, progress_callback) -> dict:
     )
 
     # ── Step 3: Dispatch to sub-agents concurrently with pre-selected tools ───
+    logger.info(
+        "[Step 3] Dispatching to %d agent(s): %s",
+        len(selected),
+        selected_names,
+    )
+    progress_callback("dispatching", "running", f"Dispatching to {len(selected)} agent(s)...")
     catalog_by_name = {a["name"]: a for a in catalog}
+    dispatch_start = time.perf_counter()
 
     async def _call_agent(_client: httpx.AsyncClient, entry: dict):
         name = entry["name"]
-        base_url = catalog_by_name[name]["url"]
+        agent_info = catalog_by_name[name]
+        base_url = agent_info["url"]
+        agent_port = agent_info.get("port", "N/A")
         sub_query = entry.get("sub_query") or query
         tools = entry.get("tools") or []
         envelope = json.dumps(
@@ -360,22 +445,46 @@ async def _orchestrate_inner(query: str, progress_callback) -> dict:
                 "tools": tools,
             }
         )
+        logger.info(
+            "[Step 3] Dispatching  agent=%s  url=%s  port=%s  mcp_tools=%s",
+            name,
+            base_url,
+            agent_port,
+            tools,
+        )
         progress_callback(
             name,
             "running",
             json.dumps({"tools": tools, "message": f"Calling {name} with {len(tools)} pre-selected tool(s)..."}),
         )
+        agent_start = time.perf_counter()
         try:
             result = await send_text_task(base_url, envelope)
+            elapsed_ms = round((time.perf_counter() - agent_start) * 1000, 1)
             snippet = ""
             if isinstance(result, dict):
                 snippet = json.dumps(result, indent=2)[:500]
             elif isinstance(result, str):
                 snippet = result[:500]
+            logger.info(
+                "[Step 3] Agent response  agent=%s  url=%s  elapsed=%sms  tools=%s",
+                name,
+                base_url,
+                elapsed_ms,
+                tools,
+            )
             progress_callback(name, "complete", json.dumps({"tools": tools, "snippet": snippet}))
             return name, result
         except Exception as e:
+            elapsed_ms = round((time.perf_counter() - agent_start) * 1000, 1)
             msg = f"{name} A2A request failed: {e}"
+            logger.error(
+                "[Step 3] Agent FAILED  agent=%s  url=%s  elapsed=%sms  error=%s",
+                name,
+                base_url,
+                elapsed_ms,
+                e,
+            )
             progress_callback(name, "error", msg)
             return name, {"error": msg}
 
@@ -384,8 +493,18 @@ async def _orchestrate_inner(query: str, progress_callback) -> dict:
         agent_results = await asyncio.gather(*agent_tasks)
         responses = {name: result for name, result in agent_results}
 
+    dispatch_elapsed_ms = round((time.perf_counter() - dispatch_start) * 1000, 1)
+    logger.info(
+        "[Step 3] Dispatch complete  agents=%s  total_elapsed=%sms",
+        selected_names,
+        dispatch_elapsed_ms,
+    )
+    progress_callback("dispatching", "complete", "All agent responses received")
+
     # ── Step 4: Aggregate results ──────────────────────────────────────────────
+    logger.info("[Step 4] Aggregating results from %d agent(s)...", len(selected))
     progress_callback("aggregating", "running", "Aggregating results into final report...")
+    agg_start = time.perf_counter()
     try:
         agg_template = _load_prompt_safe(AGGREGATOR_PROMPT_PATH)
         agg_user = agg_template.format(
@@ -402,18 +521,37 @@ async def _orchestrate_inner(query: str, progress_callback) -> dict:
                 json_mode=True,
             )
         except Exception as e:
-            logger.warning("Aggregator json_mode failed, retrying without it: %s", e)
+            logger.warning("[Step 4] Aggregator json_mode failed, retrying without it: %s", e)
             final_raw = await async_call_llm(
                 system_prompt="You are a senior research synthesiser. Output ONLY valid JSON.",
                 user_prompt=agg_user,
             )
         result = _parse_aggregator_output(final_raw)
+        agg_elapsed_ms = round((time.perf_counter() - agg_start) * 1000, 1)
+        logger.info(
+            "[Step 4] Aggregation complete  elapsed=%sms  sections=%s",
+            agg_elapsed_ms,
+            [k for k in result if k not in ("selected_agents", "routing_reasoning", "parse_warning")],
+        )
         progress_callback("aggregating", "complete", "Report finalized")
         if isinstance(result, dict):
             result["selected_agents"] = selected_names
             result["routing_reasoning"] = routing.get("reasoning", "")
+        total_elapsed = round((time.perf_counter() - dispatch_start) * 1000, 1)
+        logger.info(
+            "ORCHESTRATION COMPLETE  agents=%s  total_pipeline_ms=%sms",
+            selected_names,
+            total_elapsed,
+        )
+        logger.info("=" * 60)
         return result
     except Exception as e:
+        agg_elapsed_ms = round((time.perf_counter() - agg_start) * 1000, 1)
+        logger.error(
+            "[Step 4] Aggregation FAILED  elapsed=%sms  error=%s",
+            agg_elapsed_ms,
+            e,
+        )
         progress_callback("aggregating", "error", f"Aggregation failed: {e}")
         def _extract_section(agent_key: str, section_keys: list[str] | None = None) -> str:
             agent_resp = responses.get(agent_key)
@@ -445,12 +583,6 @@ async def _orchestrate_inner(query: str, progress_callback) -> dict:
 
 
 def _parse_aggregator_output(raw: str) -> dict:
-    """Parse aggregator JSON, retrying once on failure, and normalise into a
-    safe shape so the frontend can always render something.
-
-    Returns a dict with keys: tech_stack, literature_review, datasets, models,
-    evaluation_plan, prototype_guidance, selected_agents, parse_warning (optional).
-    """
     parsed = extract_json(raw)
     if not isinstance(parsed, dict):
         raise ValueError("aggregator did not return a JSON object")

@@ -1,5 +1,6 @@
 import sys
 import os
+import logging
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import subprocess
@@ -8,6 +9,8 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from app.models import SystemStatus
 from shared.config import get_setting, get_agent_urls
+
+logger = logging.getLogger("control-panel.control")
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 PYTHON = sys.executable

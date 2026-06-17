@@ -12,16 +12,3 @@ class AgentResponse(BaseModel):
     result: dict[str, Any]
     status: str = "success"
 
-
-class MCPRequest(BaseModel):
-    jsonrpc: str = "2.0"
-    method: str
-    params: dict = {}
-    id: int = 1
-
-
-class MCPResponse(BaseModel):
-    jsonrpc: str = "2.0"
-    result: Any = None
-    error: dict = None
-    id: int = 0

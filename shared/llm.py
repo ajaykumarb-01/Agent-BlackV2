@@ -8,7 +8,7 @@ import anthropic
 
 from shared.config import get_setting
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("llm")
 
 LLM_MAX_RETRIES = 3
 LLM_RETRY_DELAY = 2
@@ -128,13 +128,37 @@ def _call_llm_once(system_prompt: str, user_prompt: str, json_mode: bool = False
 
 
 def call_llm(system_prompt: str, user_prompt: str, json_mode: bool = False) -> str:
+    cfg = _get_llm_config()
+    provider = cfg["provider"]
+    model = cfg.get(f"{provider}_model", "unknown")
     last_error = None
     for attempt in range(LLM_MAX_RETRIES):
+        start = time.perf_counter()
         try:
-            return _call_llm_once(system_prompt, user_prompt, json_mode=json_mode)
+            result = _call_llm_once(system_prompt, user_prompt, json_mode=json_mode)
+            elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
+            logger.info(
+                "LLM call OK  provider=%s  model=%s  json_mode=%s  elapsed=%sms  attempt=%d/%d",
+                provider,
+                model,
+                json_mode,
+                elapsed_ms,
+                attempt + 1,
+                LLM_MAX_RETRIES,
+            )
+            return result
         except Exception as e:
+            elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
             last_error = e
-            logger.warning(f"LLM call attempt {attempt + 1}/{LLM_MAX_RETRIES} failed: {e}")
+            logger.warning(
+                "LLM call FAILED  provider=%s  model=%s  attempt=%d/%d  elapsed=%sms  error=%s",
+                provider,
+                model,
+                attempt + 1,
+                LLM_MAX_RETRIES,
+                elapsed_ms,
+                e,
+            )
             if attempt < LLM_MAX_RETRIES - 1:
                 time.sleep(LLM_RETRY_DELAY * (attempt + 1))
     raise RuntimeError(f"LLM call failed after {LLM_MAX_RETRIES} attempts: {last_error}")

@@ -1,14 +1,19 @@
 import sys
 import os
+import logging
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import re
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Query
+from shared.logging_setup import clear_logs, get_log_info
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 LOGS_DIR = os.path.join(ROOT, "logs")
+
+logger = logging.getLogger("control-panel.logs")
 
 router = APIRouter(tags=["logs"])
 
@@ -25,6 +30,7 @@ SERVICES = [
     "solution-agent-err",
     "experiment-agent",
     "experiment-agent-err",
+    "control-panel-app",
 ]
 
 
@@ -64,6 +70,7 @@ def get_logs(
     limit: int = Query(500, ge=1, le=2000),
     offset: int = Query(0, ge=0),
 ):
+    logger.info("GET /logs  level=%s  service=%s  search=%s  limit=%d  offset=%d", level, service, search, limit, offset)
     all_entries = []
 
     for svc in SERVICES:
@@ -95,11 +102,35 @@ def get_logs(
 
 @router.get("/logs/files")
 def list_log_files():
-    files = []
-    for svc in SERVICES:
-        log_file = os.path.join(LOGS_DIR, f"{svc}.log")
-        size = 0
-        if os.path.exists(log_file):
-            size = os.path.getsize(log_file)
-        files.append({"service": svc, "size_bytes": size})
+    files = get_log_info(LOGS_DIR)
     return {"files": files}
+
+
+@router.post("/logs/clear")
+def clear_log_files(
+    service: Optional[str] = Query(None, description="Clear only logs for this service (e.g. 'research-agent'). Clears all if omitted."),
+):
+    """Truncate log files to free disk space.
+
+    Pass ?service=research-agent to clear only that service's logs,
+    or omit to clear all log files.
+    """
+    if service:
+        # Clear specific service logs
+        cleared = 0
+        for suffix in ["", "-err"]:
+            path = os.path.join(LOGS_DIR, f"{service}{suffix}.log")
+            if os.path.exists(path):
+                try:
+                    with open(path, "w", encoding="utf-8") as f:
+                        f.truncate(0)
+                    cleared += 1
+                    logger.info("Cleared log file: %s", path)
+                except OSError as e:
+                    logger.error("Failed to clear %s: %s", path, e)
+        return {"cleared": cleared, "service": service}
+    else:
+        # Clear all log files
+        count = clear_logs(LOGS_DIR, "*.log")
+        logger.info("Cleared %d log file(s)", count)
+        return {"cleared": count, "service": "all"}

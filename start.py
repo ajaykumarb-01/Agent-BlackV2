@@ -21,6 +21,22 @@ AGENTS = [
 
 processes = []
 
+
+def _clear_logs():
+    """Truncate all log files in the logs directory before starting."""
+    import glob as glob_mod
+
+    count = 0
+    for log_file in glob_mod.glob(os.path.join(LOGS, "*.log")):
+        try:
+            with open(log_file, "w", encoding="utf-8") as f:
+                f.truncate(0)
+            count += 1
+        except OSError:
+            pass
+    return count
+
+
 def start_agent(name, port, dir):
     log_out = open(os.path.join(LOGS, f"{name}.log"), "w")
     log_err = open(os.path.join(LOGS, f"{name}-err.log"), "w")
@@ -31,6 +47,7 @@ def start_agent(name, port, dir):
         stderr=log_err,
     )
     return proc
+
 
 def _stream_to_file_and_console(proc, log_out_path, log_err_path, label):
     """Read subprocess stdout/stderr, print to console with label, and write to log files."""
@@ -52,6 +69,7 @@ def _stream_to_file_and_console(proc, log_out_path, log_err_path, label):
     t_err.start()
     return t_out, t_err
 
+
 def start_control_panel():
     log_out_path = os.path.join(LOGS, "control-panel.log")
     log_err_path = os.path.join(LOGS, "control-panel-err.log")
@@ -64,6 +82,7 @@ def start_control_panel():
     _stream_to_file_and_console(proc, log_out_path, log_err_path, "control-panel")
     return proc
 
+
 def stop_all():
     for proc in processes:
         if proc.poll() is None:
@@ -71,9 +90,14 @@ def stop_all():
     for proc in processes:
         proc.wait()
 
+
 if __name__ == "__main__":
     print("Starting Agent Black...")
     print(f"Logs directory: {LOGS}")
+
+    # Clear previous logs for a clean start
+    cleared = _clear_logs()
+    print(f"Cleared {cleared} old log file(s)")
     print()
 
     for agent in AGENTS:
@@ -88,6 +112,7 @@ if __name__ == "__main__":
 
     print()
     print("All agents started. Logs written to logs/")
+    print("POST /api/logs/clear to clear log files at runtime")
     print("Press Ctrl+C to stop all agents.")
 
     try:

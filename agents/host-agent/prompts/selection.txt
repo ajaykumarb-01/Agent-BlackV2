@@ -27,6 +27,10 @@ Routing rules:
 - Pick 2+ agents only if the query clearly spans multiple domains
   (e.g. multimodal = CV + NLP; CV paper reproduction = CV + ML experiment).
 - Pick all 3 ONLY if the query explicitly spans CV + NLP + classical ML.
+- IMPORTANT: Only select ONLINE agents. Agents marked OFFLINE cannot handle requests.
+  If the best agent for a query is OFFLINE, still select it — the system will
+  report that the agent is unavailable. Do NOT route to a different agent as a
+  fallback.
 - For each selected agent, list ONLY the specific tools needed to answer the query.
   Examples:
     "best dataset for image classification"          -> research with ["find_cv_datasets"]

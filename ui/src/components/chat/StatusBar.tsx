@@ -76,7 +76,7 @@ export function StatusBar() {
           <span className="hidden rounded-md border border-border bg-background px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider sm:inline">
             {cardCount}/3 cards
           </span>
-          <span className="rounded-md border border-border bg-background px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider">
+          <span className="rounded-md border border-border bg-background px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider tabular-nums">
             {provider}
           </span>
           <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? "" : "-rotate-90"}`} />
@@ -108,7 +108,7 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
   return (
     <div className="flex flex-col">
       <span className="text-text-muted text-[10px] uppercase tracking-wider">{label}</span>
-      <span className={`font-medium ${highlight ? "text-emerald-400" : "text-foreground"}`}>{value}</span>
+      <span className={`font-medium tabular-nums ${highlight ? "text-emerald-400" : "text-foreground"}`}>{value}</span>
     </div>
   );
 }

@@ -11,13 +11,14 @@ if __name__ != "__main__":
 
 from shared.config import get_agent_urls
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("discovery")
 
 DISCOVERY_TIMEOUT = 3.0
 
 
 async def _fetch_agent(client: httpx.AsyncClient, name: str, url: str) -> dict[str, Any] | None:
     try:
+        logger.debug("Probing agent %s at %s", name, url)
         cap_task = client.get(f"{url.rstrip('/')}/capabilities", timeout=DISCOVERY_TIMEOUT)
         tools_task = client.get(f"{url.rstrip('/')}/tools", timeout=DISCOVERY_TIMEOUT)
         health_task = client.get(f"{url.rstrip('/')}/health", timeout=DISCOVERY_TIMEOUT)
@@ -29,11 +30,11 @@ async def _fetch_agent(client: httpx.AsyncClient, name: str, url: str) -> dict[s
         return None
 
     if isinstance(cap_resp, Exception) or cap_resp.status_code != 200:
-        logger.warning("Capabilities unreachable for %s", name)
+        logger.warning("Capabilities unreachable for %s at %s", name, url)
         return None
 
     if isinstance(health_resp, Exception) or health_resp.status_code != 200:
-        logger.warning("Health check failed for %s", name)
+        logger.warning("Health check failed for %s at %s", name, url)
         return None
 
     try:
@@ -66,6 +67,15 @@ async def _fetch_agent(client: httpx.AsyncClient, name: str, url: str) -> dict[s
                     }
                 )
 
+    logger.info(
+        "Agent discovered  name=%s  url=%s  port=%s  tools=%d  tool_names=%s",
+        name,
+        url,
+        capabilities.get("port"),
+        len(tools),
+        [t["name"] for t in tools],
+    )
+
     return {
         "name": name,
         "url": url,
@@ -75,7 +85,7 @@ async def _fetch_agent(client: httpx.AsyncClient, name: str, url: str) -> dict[s
     }
 
 
-async def discover_agents() -> list[dict[str, Any]]:
+async def discover_agents(include_offline: bool = True) -> list[dict[str, Any]]:
     """Discover all configured agents and their available tools at runtime.
 
     Returns a list of:
@@ -84,26 +94,76 @@ async def discover_agents() -> list[dict[str, Any]]:
             "url": "http://localhost:8001",
             "description": "Computer Vision ...",
             "port": 8001,
+            "online": true,
             "tools": [{"name": "search_papers", "description": "..."}, ...]
         }
 
-    Agents that fail discovery (offline, timeout, non-200) are silently skipped.
+    If include_offline is True (default), offline agents are included with
+    online=False and empty tools so the LLM knows they exist but are unreachable.
     """
+    all_urls = get_agent_urls()
+    logger.info("Discovery starting  agents=%s", list(all_urls.keys()))
+
     async with httpx.AsyncClient(timeout=DISCOVERY_TIMEOUT) as client:
-        tasks = [_fetch_agent(client, name, url) for name, url in get_agent_urls().items()]
+        tasks = [_fetch_agent(client, name, url) for name, url in all_urls.items()]
         results = await asyncio.gather(*tasks)
-    return [r for r in results if r is not None]
+
+    online_agents: dict[str, dict[str, Any]] = {}
+    for r in results:
+        if r is not None:
+            r["online"] = True
+            online_agents[r["name"]] = r
+
+    if not include_offline:
+        logger.info(
+            "Discovery complete  online=%d  agents=%s",
+            len(online_agents),
+            list(online_agents.keys()),
+        )
+        return list(online_agents.values())
+
+    # Include offline agents with empty tools so the LLM knows they exist
+    all_agents: list[dict[str, Any]] = []
+    for name, url in all_urls.items():
+        if name in online_agents:
+            all_agents.append(online_agents[name])
+        else:
+            logger.warning("Agent OFFLINE  name=%s  url=%s", name, url)
+            all_agents.append({
+                "name": name,
+                "url": url,
+                "description": "",
+                "port": None,
+                "online": False,
+                "tools": [],
+            })
+
+    online_count = sum(1 for a in all_agents if a.get("online", True))
+    logger.info(
+        "Discovery complete  total=%d  online=%d  offline=%d  agents=%s",
+        len(all_agents),
+        online_count,
+        len(all_agents) - online_count,
+        [(a["name"], "ONLINE" if a.get("online") else "OFFLINE") for a in all_agents],
+    )
+    return all_agents
 
 
 def render_catalog(catalog: list[dict[str, Any]]) -> str:
-    """Render the catalog as a human-readable text block for LLM prompts."""
+    """Render the catalog as a human-readable text block for LLM prompts.
+
+    Offline agents are shown with a status marker so the LLM knows they exist
+    but cannot be used.
+    """
     if not catalog:
         return "(no agents are currently online)"
 
     blocks: list[str] = []
     for agent in catalog:
+        online = agent.get("online", True)
+        status = "ONLINE" if online else "OFFLINE — do NOT select this agent"
         lines = [
-            f"[Agent: {agent['name']}]",
+            f"[Agent: {agent['name']}]  ({status})",
             f"  URL: {agent['url']}",
             f"  Description: {agent['description'] or '(none)'}",
             "  Tools:",

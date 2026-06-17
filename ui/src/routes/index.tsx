@@ -86,7 +86,7 @@ function extractTechStackFromText(text: string): string[] {
 function buildSectionsFromReport(report: Record<string, any> | undefined): import("@/lib/store").ReportSections | undefined {
   if (!report) return undefined;
 
-  if (report.error === "not_research_query") {
+  if (report.error === "not_research_query" || report.error === "no_suitable_agent") {
     return {
       error: String(report.error),
       message: toDisplayString(report.message),
@@ -159,7 +159,7 @@ function historyItemToMessages(h: {
     queryId: h.id,
     content:
       toDisplayString(h.report?.content)
-      || (h.report?.error === "not_research_query"
+      || (h.report?.error === "not_research_query" || h.report?.error === "no_suitable_agent"
         ? toDisplayString(h.report?.message)
         : null)
       || "Research complete. See report below.",
@@ -328,7 +328,7 @@ function ChatPage() {
             const sections = buildSectionsFromReport(r);
             const content =
               toDisplayString(r?.content)
-              || (r?.error === "not_research_query" ? toDisplayString(r?.message) : null)
+              || (r?.error === "not_research_query" || r?.error === "no_suitable_agent" ? toDisplayString(r?.message) : null)
               || "Research complete. See report below.";
             updateMessage(placeholderId, {
               pending: false,
@@ -366,7 +366,7 @@ function ChatPage() {
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[860px] flex-col gap-6 px-3 py-4 sm:px-4 sm:py-6">
+        <div className="mx-auto flex w-full max-w-[860px] min-h-[60vh] flex-col gap-6 px-3 py-4 sm:px-4 sm:py-6">
           <StatusBar />
           {messages.length === 0 ? (
             <EmptyState onPrompt={handleSubmit} />

@@ -1,7 +1,6 @@
 import os
 import sqlite3
 import time
-import atexit
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -79,20 +78,6 @@ def get_all_settings() -> dict:
 
 
 _with_lock_init()
-
-LLM_PROVIDER = get_setting("LLM_PROVIDER", "gemini")
-
-GEMINI_API_KEY = get_setting("GEMINI_API_KEY")
-GEMINI_BASE_URL = get_setting("GEMINI_BASE_URL")
-GEMINI_MODEL = get_setting("GEMINI_MODEL", "gemini-1.5-flash")
-
-OPENAI_API_KEY = get_setting("OPENAI_API_KEY")
-OPENAI_BASE_URL = get_setting("OPENAI_BASE_URL", "https://api.openai.com/v1")
-OPENAI_MODEL = get_setting("OPENAI_MODEL", "gpt-4o")
-
-ANTHROPIC_API_KEY = get_setting("ANTHROPIC_API_KEY")
-ANTHROPIC_BASE_URL = get_setting("ANTHROPIC_BASE_URL")
-ANTHROPIC_MODEL = get_setting("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
 
 SSE_TIMEOUT = int(get_setting("SSE_TIMEOUT", "900"))
 

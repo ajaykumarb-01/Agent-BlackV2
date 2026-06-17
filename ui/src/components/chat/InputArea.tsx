@@ -40,7 +40,7 @@ export function InputArea({
     <div className="sticky bottom-0 bg-gradient-to-t from-background via-background to-transparent pt-6 pb-4">
       <div className="mx-auto max-w-[860px] px-4">
         <div
-          className={`flex items-end gap-2 rounded-2xl border bg-surface p-2 transition-all duration-200 ${
+          className={`flex items-end gap-2 rounded-2xl border bg-surface p-2 transition-[border-color,box-shadow] duration-200 ${
             focused
               ? "border-foreground/30 shadow-lg shadow-foreground/5"
               : "border-border shadow-sm"

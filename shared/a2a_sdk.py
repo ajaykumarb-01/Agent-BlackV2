@@ -1,9 +1,13 @@
 import inspect
 import json
+import logging
+import time
 from typing import Any, Awaitable, Callable
 
 import httpx
 from fastapi import FastAPI
+
+logger = logging.getLogger("a2a_sdk")
 
 from a2a.client import A2ACardResolver, ClientConfig, create_client
 from a2a.helpers import (
@@ -187,6 +191,8 @@ def add_sdk_a2a_routes(
 
 
 async def send_text_task(base_url: str, query: str) -> dict[str, Any]:
+    logger.info("A2A send_text_task  url=%s  payload_size=%d", base_url, len(query))
+    start = time.perf_counter()
     async with httpx.AsyncClient(timeout=300) as httpx_client:
         resolver = A2ACardResolver(httpx_client=httpx_client, base_url=base_url)
         card = await resolver.get_agent_card()
@@ -198,18 +204,14 @@ async def send_text_task(base_url: str, query: str) -> dict[str, Any]:
             request = SendMessageRequest(
                 message=new_text_message(query, media_type=TEXT_MODE, role=Role.ROLE_USER)
             )
-            # Stream order is: task → status_update(working) → artifact_update
-            # → status_update(completed). The last chunk is just a status_update
-            # saying "Request completed", so we must scan the stream and prefer
-            # the chunk that actually carries the result (artifact_update,
-            # message, or task with artifacts). Fall back to the final chunk
-            # if no payload-bearing chunk is seen.
             artifact_chunk = None
             message_chunk = None
             task_chunk = None
             final_chunk = None
+            chunk_count = 0
             async for chunk in client.send_message(request):
                 final_chunk = chunk
+                chunk_count += 1
                 if chunk.HasField("artifact_update") and artifact_chunk is None:
                     artifact_chunk = chunk
                 elif chunk.HasField("message") and message_chunk is None:
@@ -217,9 +219,23 @@ async def send_text_task(base_url: str, query: str) -> dict[str, Any]:
                 elif chunk.HasField("task") and task_chunk is None:
                     task_chunk = chunk
 
+            elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
             chosen = artifact_chunk or message_chunk or task_chunk or final_chunk
             if chosen is None:
+                logger.error(
+                    "A2A no response  url=%s  chunks_received=%d  elapsed=%sms",
+                    base_url,
+                    chunk_count,
+                    elapsed_ms,
+                )
                 raise RuntimeError(f"A2A agent at {base_url} returned no response")
+            logger.info(
+                "A2A response OK  url=%s  chunks_received=%d  elapsed=%sms  source=%s",
+                base_url,
+                chunk_count,
+                elapsed_ms,
+                "artifact" if artifact_chunk else "message" if message_chunk else "task" if task_chunk else "final",
+            )
             return normalize_stream_response(chosen)
         finally:
             await client.close()

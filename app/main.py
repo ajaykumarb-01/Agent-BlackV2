@@ -1,50 +1,64 @@
 import sys
 import os
 import time
+import uuid
 import logging
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from shared.logging_setup import (
+    get_logger,
+    setup_service_logging,
+    set_correlation_id,
+)
+
+# ── Logging setup ──────────────────────────────────────────────
+LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
+setup_service_logging("control-panel", log_dir=LOG_DIR, console_level=logging.INFO)
+
+logger = get_logger("control-panel")
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# ── Logging setup ──────────────────────────────────────────────
-LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
-os.makedirs(LOG_DIR, exist_ok=True)
-
-_fmt = logging.Formatter("%(asctime)s  %(levelname)-7s  %(message)s", datefmt="%H:%M:%S")
-
-# Root logger: DEBUG level, writes all levels to file
-_root = logging.getLogger()
-_root.setLevel(logging.DEBUG)
-
-_fh = logging.FileHandler(os.path.join(LOG_DIR, "control-panel-app.log"), encoding="utf-8")
-_fh.setLevel(logging.DEBUG)
-_fh.setFormatter(_fmt)
-_root.addHandler(_fh)
-
-# Console: INFO and above only
-_sh = logging.StreamHandler(sys.stderr)
-_sh.setLevel(logging.INFO)
-_sh.setFormatter(_fmt)
-_root.addHandler(_sh)
-
-logger = logging.getLogger("agent-black")
-
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        cid = uuid.uuid4().hex[:12]
+        set_correlation_id(cid)
         start = time.time()
-        logger.info(f">>> {request.method} {request.url.path}")
+        client_ip = request.client.host if request.client else "unknown"
+        logger.info(
+            ">>> %s %s  client_ip=%s",
+            request.method,
+            request.url.path,
+            client_ip,
+        )
         try:
             response = await call_next(request)
             elapsed = round((time.time() - start) * 1000, 1)
-            logger.info(f"<<< {request.method} {request.url.path}  {response.status_code}  {elapsed}ms")
+            logger.info(
+                "<<< %s %s  status=%d  elapsed=%sms  client_ip=%s  cid=%s",
+                request.method,
+                request.url.path,
+                response.status_code,
+                elapsed,
+                client_ip,
+                cid,
+            )
             return response
         except Exception as exc:
             elapsed = round((time.time() - start) * 1000, 1)
-            logger.error(f"!!! {request.method} {request.url.path}  ERROR  {elapsed}ms  {exc}")
+            logger.error(
+                "!!! %s %s  ERROR  elapsed=%sms  client_ip=%s  error=%s  cid=%s",
+                request.method,
+                request.url.path,
+                elapsed,
+                client_ip,
+                exc,
+                cid,
+            )
             raise
 
 
@@ -83,7 +97,9 @@ app.include_router(logs_router, prefix="/api")
 @app.on_event("startup")
 def on_startup():
     logger.info("Agent Black Control Panel starting up")
-    logger.info(f"Routes: /api/status, /api/query, /api/settings, /api/setup/step, /api/diagram/*, /api/logs")
+    logger.info(
+        "Routes: /api/status, /api/query, /api/settings, /api/setup/step, /api/diagram/*, /api/logs"
+    )
 
 
 @app.get("/health")
@@ -101,5 +117,5 @@ def root():
             "query": "POST /api/query, GET /api/query/history",
             "settings": "GET/PUT /api/settings",
             "diagram": "POST /api/diagram/agent-flow, POST /api/diagram/tech-stack",
-        }
+        },
     }

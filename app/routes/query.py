@@ -4,6 +4,7 @@ import json
 import asyncio
 import uuid
 import re
+import logging
 from datetime import datetime, timezone
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -18,6 +19,8 @@ from app.database import (
     async_get_query_by_id, async_get_query_by_uuid,
 )
 from shared.config import SSE_TIMEOUT
+
+logger = logging.getLogger("control-panel.query")
 
 router = APIRouter(tags=["query"])
 
@@ -281,6 +284,7 @@ async def run_orchestration(task_id: str, query: str):
     Background task that runs the full orchestration pipeline.
     Progress events are written to the DB asynchronously for SSE streaming.
     """
+    logger.info("Orchestration started  task_id=%s  query=%s", task_id, query[:200])
     try:
         import importlib.util
         orch_path = os.path.join(os.path.dirname(__file__), "..", "..", "agents", "host-agent", "orchestrator.py")
@@ -288,20 +292,19 @@ async def run_orchestration(task_id: str, query: str):
         orch = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(orch)
 
-        # progress_callback is called synchronously from the async orchestrator
-        # on the event loop thread — fire-and-forget an async DB write via create_task
         def progress(step: str, status: str, detail: str = ""):
             asyncio.create_task(async_save_task_event(task_id, step, status, detail))
 
         report = await orch.orchestrate(query, progress_callback=progress)
 
-        # Generate diagram in a thread (it's a synchronous CPU-bound function)
         diagram = await asyncio.to_thread(generate_agent_flow_diagram, query, report)
         agents_used = report.get("selected_agents", []) if isinstance(report, dict) else []
 
         await async_update_task_result(task_id, report, diagram, agents_used)
         await async_save_query(query, report, diagram, agents_used)
+        logger.info("Orchestration complete  task_id=%s  agents=%s", task_id, agents_used)
     except Exception as e:
+        logger.error("Orchestration failed  task_id=%s  error=%s", task_id, e)
         await async_update_task_error(task_id, str(e))
         await async_save_task_event(task_id, "error", "error", str(e))
 
@@ -309,9 +312,9 @@ async def run_orchestration(task_id: str, query: str):
 @router.post("/query")
 async def submit_query(req: QueryRequest):
     task_id = str(uuid.uuid4())
+    logger.info("Query submitted  task_id=%s  query=%s", task_id, req.query[:200])
     await async_create_task(task_id, req.query)
     await async_save_task_event(task_id, "submitted", "running", "Query submitted")
-    # Fire-and-forget the orchestration background task
     asyncio.create_task(run_orchestration(task_id, req.query))
     return {"task_id": task_id, "status": "running"}
 

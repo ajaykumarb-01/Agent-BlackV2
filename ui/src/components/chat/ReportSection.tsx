@@ -647,6 +647,7 @@ function ParsedSectionContent({ data }: { data: SectionValue }) {
 // ── error report ───────────────────────────────────────────────────────────
 
 function ErrorReport({ report }: { report: Record<string, unknown> }) {
+  const errorType = String(report.error || "");
   const message = String(report.message || "Unknown error");
   const reason = typeof report.reason === "string" ? report.reason : "";
   const suggestion = typeof report.suggestion === "string" ? report.suggestion : "";
@@ -655,11 +656,18 @@ function ErrorReport({ report }: { report: Record<string, unknown> }) {
     ? (report.validation as Record<string, unknown>)
     : null;
 
+  const isAgentUnavailable = errorType === "no_suitable_agent";
+  const title = isAgentUnavailable ? "Agent unavailable" : "Not a research query";
+  const borderColor = isAgentUnavailable ? "border-red-500/30" : "border-amber-500/30";
+  const bgColor = isAgentUnavailable ? "bg-red-500/5" : "bg-amber-500/5";
+  const iconColor = isAgentUnavailable ? "text-red-400" : "text-amber-400";
+  const textColor = isAgentUnavailable ? "text-red-300" : "text-amber-300";
+
   return (
-    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+    <div className={`rounded-lg border ${borderColor} ${bgColor} p-4`}>
       <div className="flex items-center gap-2 mb-2">
-        <AlertTriangle className="h-4 w-4 text-amber-400" />
-        <span className="text-sm font-medium text-amber-300">Not a research query</span>
+        <AlertTriangle className={`h-4 w-4 ${iconColor}`} />
+        <span className={`text-sm font-medium ${textColor}`}>{title}</span>
       </div>
       <p className="text-sm text-text-secondary leading-relaxed mb-3">{message}</p>
       {reason && <p className="mb-3 text-xs leading-relaxed text-text-muted">{reason}</p>}
@@ -718,7 +726,7 @@ function parseSection(value: SectionValue): SectionValue {
 export function ReportSections({ sections }: { sections: ReportSections }) {
   const raw = sections as Record<string, unknown>;
 
-  if (raw?.error === "not_research_query") {
+  if (raw?.error === "not_research_query" || raw?.error === "no_suitable_agent") {
     return <ErrorReport report={raw} />;
   }
 
