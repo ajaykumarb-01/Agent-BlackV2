@@ -22,9 +22,9 @@ agent_start_time = time.time()
 def _build_agents():
     urls = get_agent_urls()
     return [
-        {"name": "research-agent", "port": 8001, "url": urls["research"], "dir": os.path.join("agents", "research-agent")},
-        {"name": "solution-agent", "port": 8002, "url": urls["solution"], "dir": os.path.join("agents", "solution-agent")},
-        {"name": "experiment-agent", "port": 8003, "url": urls["experiment"], "dir": os.path.join("agents", "experiment-agent")},
+        {"name": "research-agent", "port": 8001, "url": urls.get("research", "http://localhost:8001"), "dir": os.path.join("agents", "research-agent")},
+        {"name": "solution-agent", "port": 8002, "url": urls.get("solution", "http://localhost:8002"), "dir": os.path.join("agents", "solution-agent")},
+        {"name": "experiment-agent", "port": 8003, "url": urls.get("experiment", "http://localhost:8003"), "dir": os.path.join("agents", "experiment-agent")},
     ]
 
 

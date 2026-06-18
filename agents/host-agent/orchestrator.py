@@ -4,7 +4,13 @@ import json
 import asyncio
 import logging
 import os
+import sys
 import time
+
+# Ensure host-agent submodules are importable (needed when loaded via importlib)
+_HOST_AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _HOST_AGENT_DIR not in sys.path:
+    sys.path.insert(0, _HOST_AGENT_DIR)
 
 from shared.discovery import discover_agents, render_catalog
 from shared.llm import async_call_llm
