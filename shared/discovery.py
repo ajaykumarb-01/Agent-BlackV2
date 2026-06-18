@@ -161,7 +161,7 @@ def render_catalog(catalog: list[dict[str, Any]]) -> str:
     blocks: list[str] = []
     for agent in catalog:
         online = agent.get("online", True)
-        status = "ONLINE" if online else "OFFLINE — do NOT select this agent"
+        status = "ONLINE" if online else "OFFLINE — agent is unreachable but still select it if it is the best fit; the system will notify the user"
         lines = [
             f"[Agent: {agent['name']}]  ({status})",
             f"  URL: {agent['url']}",
