@@ -22,12 +22,25 @@ def build_not_research_response(reason: str, validation: dict | None = None) -> 
 
 def rule_based_validation(query: str) -> dict:
     """Score a query against research keywords without an LLM call."""
+    import re
     query_lower = query.lower().strip()
     tokens = [t for t in query_lower.replace("/", " ").replace("-", " ").split() if t]
+    token_set = set(tokens)
 
     matched_domains = [d for d in RESEARCH_DOMAINS if d in query_lower]
     matched_actions = [a for a in RESEARCH_ACTIONS if a in query_lower]
-    matched_negative = [p for p in NON_RESEARCH_PATTERNS if p in query_lower]
+
+    # Negative patterns: use word-boundary match for short patterns to avoid
+    # false positives (e.g. "hi" matching inside "this" or "which").
+    matched_negative = []
+    for p in NON_RESEARCH_PATTERNS:
+        if len(p) <= 3:
+            if p in token_set:
+                matched_negative.append(p)
+        else:
+            if p in query_lower:
+                matched_negative.append(p)
+
     matched_ambiguous = [h for h in AMBIGUOUS_HINTS if h in query_lower]
 
     score = 0

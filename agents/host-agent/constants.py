@@ -80,7 +80,7 @@ RESEARCH_DOMAINS: list[str] = [
     "transformer", "cnn", "diffusion", "gan", "reinforcement learning",
     "paper", "arxiv", "research proposal", "proof of concept",
     # CV/ML implementation keywords
-    "ocr", "optical character recognition", "handwriting", "handwritten", "handwritten",
+    "ocr", "optical character recognition", "handwriting", "handwritten",
     "text recognition", "document", "receipt", "invoice",
     "image processing", "feature extraction", "pipeline",
     "build", "develop", "create", "implement", "design",
@@ -110,7 +110,7 @@ NON_RESEARCH_PATTERNS: list[str] = [
     "weather", "movie", "song", "lyrics", "joke", "meme", "recipe", "restaurant",
     "sports score", "cricket score", "football score", "stock price", "bitcoin price",
     "translate this", "write birthday", "instagram caption", "what is my ip",
-    "who are you", "hello", "hi", "good morning", "good night",
+    "who are you", "good morning", "good night",
 ]
 
 AMBIGUOUS_HINTS: list[str] = [
