@@ -10,10 +10,13 @@ export const Route = createFileRoute("/settings")({
 });
 
 const AGENT_KEYS = ["research", "solution", "experiment"] as const;
-const AGENT_DEFAULTS: Record<string, { host: string; port: number }> = {
-  research: { host: "", port: 8001 },
-  solution: { host: "", port: 8002 },
-  experiment: { host: "", port: 8003 },
+type AgentMode = "local" | "network" | "disabled";
+const MODE_CYCLE: AgentMode[] = ["local", "network", "disabled"];
+
+const MODE_STYLES: Record<AgentMode, { bg: string; label: string; dot: string }> = {
+  local: { bg: "bg-green-500", label: "LOCAL", dot: "bg-green-400" },
+  network: { bg: "bg-blue-500", label: "NETWORK", dot: "bg-blue-400" },
+  disabled: { bg: "bg-red-500", label: "DISABLED", dot: "bg-red-400" },
 };
 
 function SettingsPage() {
@@ -30,12 +33,14 @@ function SettingsPage() {
   const [agentNetwork, setAgentNetwork] = useState<
     Record<string, AgentNetworkConfig>
   >({
-    research: { network_mode: false, network_host: "", network_port: 8001 },
-    solution: { network_mode: false, network_host: "", network_port: 8002 },
-    experiment: { network_mode: false, network_host: "", network_port: 8003 },
+    research: { mode: "local", network_host: "", network_port: 8001 },
+    solution: { mode: "local", network_host: "", network_port: 8002 },
+    experiment: { mode: "local", network_host: "", network_port: 8003 },
   });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [agentSaving, setAgentSaving] = useState(false);
+  const [agentMsg, setAgentMsg] = useState("");
 
   useEffect(() => {
     api
@@ -63,43 +68,13 @@ function SettingsPage() {
       .catch(() => {});
   }, []);
 
-  const handleSave = async () => {
-    setSaving(true);
-    setMsg("");
-    try {
-      const payload: Record<string, any> = { llm_provider: provider };
-      if (apiKey) payload[`${provider}_api_key`] = apiKey;
-      if (baseUrl) payload[`${provider}_base_url`] = baseUrl;
-      if (model) payload[`${provider}_model`] = model;
-      payload.kaggle_username = kaggleUsername || undefined;
-      if (kaggleKey) payload.kaggle_key = kaggleKey;
-      payload.agent_network = {};
-      for (const key of AGENT_KEYS) {
-        const cfg = agentNetwork[key];
-        payload.agent_network[key] = {
-          network_mode: cfg.network_mode,
-          network_host: cfg.network_host,
-          network_port: cfg.network_port,
-        };
-      }
-      await api.updateSettings(payload);
-      setMsg("Settings saved successfully");
-      setApiKey("");
-    } catch (err: any) {
-      setMsg(`Error: ${err.message}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const toggleNetwork = (key: string) => {
-    setAgentNetwork((prev) => ({
-      ...prev,
-      [key]: {
-        ...prev[key],
-        network_mode: !prev[key].network_mode,
-      },
-    }));
+  const cycleMode = (key: string) => {
+    setAgentNetwork((prev) => {
+      const cur = prev[key].mode;
+      const idx = MODE_CYCLE.indexOf(cur);
+      const nextMode = MODE_CYCLE[(idx + 1) % MODE_CYCLE.length];
+      return { ...prev, [key]: { ...prev[key], mode: nextMode } };
+    });
   };
 
   const updateNetworkHost = (key: string, host: string) => {
@@ -115,6 +90,48 @@ function SettingsPage() {
       ...prev,
       [key]: { ...prev[key], network_port: isNaN(num) ? 0 : num },
     }));
+  };
+
+  const handleSaveAgentNetwork = async () => {
+    setAgentSaving(true);
+    setAgentMsg("");
+    try {
+      const payload: Record<string, any> = { agent_network: {} };
+      for (const key of AGENT_KEYS) {
+        const cfg = agentNetwork[key];
+        payload.agent_network[key] = {
+          mode: cfg.mode,
+          network_host: cfg.network_host,
+          network_port: cfg.network_port,
+        };
+      }
+      await api.updateSettings(payload);
+      setAgentMsg("Agent configuration saved");
+    } catch (err: any) {
+      setAgentMsg(`Error: ${err.message}`);
+    } finally {
+      setAgentSaving(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMsg("");
+    try {
+      const payload: Record<string, any> = { llm_provider: provider };
+      if (apiKey) payload[`${provider}_api_key`] = apiKey;
+      if (baseUrl) payload[`${provider}_base_url`] = baseUrl;
+      if (model) payload[`${provider}_model`] = model;
+      payload.kaggle_username = kaggleUsername || undefined;
+      if (kaggleKey) payload.kaggle_key = kaggleKey;
+      await api.updateSettings(payload);
+      setMsg("Settings saved successfully");
+      setApiKey("");
+    } catch (err: any) {
+      setMsg(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -171,43 +188,45 @@ function SettingsPage() {
 
       <Section title="Agent Network Configuration">
         <p className="text-xs text-text-secondary">
-          Configure each agent to run locally or on a network PC. Network agents
-          are not started by this system — they must be running on the remote
-          host independently.
+          Click the button to cycle through modes:{" "}
+          <span className="text-green-400 font-medium">Local</span> (runs here) →{" "}
+          <span className="text-blue-400 font-medium">Network</span> (remote PC) →{" "}
+          <span className="text-red-400 font-medium">Disabled</span> (not used).
+          Network agents must be running on the remote host independently.
         </p>
         {AGENT_KEYS.map((key) => {
           const cfg = agentNetwork[key];
-          const isNetwork = cfg.network_mode;
+          const mode = cfg.mode;
+          const styles = MODE_STYLES[mode];
           const label = key.charAt(0).toUpperCase() + key.slice(1);
           return (
             <div key={key} className="flex flex-col gap-2">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => toggleNetwork(key)}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                    isNetwork ? "bg-blue-500" : "bg-green-500"
-                  }`}
+                  onClick={() => cycleMode(key)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${styles.bg}`}
+                  title={`Click to change: current = ${styles.label}`}
                 >
                   <span
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition-transform ${
-                      isNetwork ? "translate-x-4" : "translate-x-0"
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${
+                      mode === "disabled"
+                        ? "translate-x-0"
+                        : mode === "network"
+                          ? "translate-x-5"
+                          : "translate-x-5"
                     }`}
                   />
                 </button>
                 <span className="text-sm font-medium">{label} Agent</span>
                 <span
-                  className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                    isNetwork
-                      ? "bg-blue-500/15 text-blue-400"
-                      : "bg-green-500/15 text-green-400"
-                  }`}
+                  className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded ${styles.bg}/20 ${styles.dot}`}
                 >
-                  {isNetwork ? "Network" : "Local"}
+                  {styles.label}
                 </span>
               </div>
-              {isNetwork && (
-                <div className="flex gap-2 ml-12">
+              {mode === "network" && (
+                <div className="flex gap-2 ml-14">
                   <div className="flex-1">
                     <span className="text-[10px] uppercase tracking-wider text-text-muted">
                       Host / IP
@@ -225,14 +244,29 @@ function SettingsPage() {
                     <Input
                       value={String(cfg.network_port)}
                       onChange={(v) => updateNetworkPort(key, v)}
-                      placeholder={String(AGENT_DEFAULTS[key].port)}
+                      placeholder="8001"
                     />
                   </div>
                 </div>
               )}
+              {mode === "disabled" && (
+                <p className="ml-14 text-[11px] text-red-400/70">
+                  This agent will not be discovered or used by the orchestrator.
+                </p>
+              )}
             </div>
           );
         })}
+        <div className="flex items-center gap-3 mt-2">
+          <button
+            onClick={handleSaveAgentNetwork}
+            disabled={agentSaving}
+            className="self-start rounded-md bg-foreground px-3 py-1.5 text-sm text-background hover:opacity-90 disabled:opacity-50"
+          >
+            {agentSaving ? "Saving..." : "Save Agent Config"}
+          </button>
+          {agentMsg && <span className="text-xs text-text-secondary">{agentMsg}</span>}
+        </div>
       </Section>
 
       <Section title="Kaggle API">

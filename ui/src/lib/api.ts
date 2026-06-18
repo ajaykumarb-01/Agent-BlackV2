@@ -91,7 +91,7 @@ export interface LLMSettings {
 }
 
 export interface AgentNetworkConfig {
-  network_mode: boolean;
+  mode: "local" | "network" | "disabled";
   network_host: string;
   network_port: number;
 }

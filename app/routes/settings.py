@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from app.models import SettingsUpdate, SettingsResponse, LLMSettings
 from shared.config import (
     get_setting, set_setting, get_all_settings, get_agent_urls,
-    get_agent_network_modes, set_agent_network_mode,
+    get_agent_modes, set_agent_mode,
     get_agent_network_host, set_agent_network_host,
     get_agent_network_port, set_agent_network_port,
 )
@@ -15,12 +15,12 @@ router = APIRouter(tags=["settings"])
 
 
 def _build_agent_network() -> dict[str, dict]:
-    """Build per-agent network config for the settings response."""
-    modes = get_agent_network_modes()
+    """Build per-agent config for the settings response."""
+    modes = get_agent_modes()
     result = {}
     for name in ("research", "solution", "experiment"):
         result[name] = {
-            "network_mode": modes.get(name, False),
+            "mode": modes.get(name, "local"),
             "network_host": get_agent_network_host(name),
             "network_port": get_agent_network_port(name),
         }
@@ -85,30 +85,23 @@ def update_settings(update: SettingsUpdate):
         updates["KAGGLE_USERNAME"] = update.kaggle_username
     if update.kaggle_key is not None:
         updates["KAGGLE_KEY"] = update.kaggle_key
-    if update.research_agent_url:
-        updates["RESEARCH_AGENT_URL"] = update.research_agent_url
-    if update.solution_agent_url:
-        updates["SOLUTION_AGENT_URL"] = update.solution_agent_url
-    if update.experiment_agent_url:
-        updates["EXPERIMENT_AGENT_URL"] = update.experiment_agent_url
 
     for k, v in updates.items():
         if v is not None:
             set_setting(k, v)
 
-    # ── Per-agent network mode config ────────────────────────────────────────
+    # ── Per-agent mode config (local / network / disabled) ───────────────────
     if update.agent_network:
         for agent_name, cfg in update.agent_network.items():
             if agent_name not in ("research", "solution", "experiment"):
                 continue
-            if "network_mode" in cfg:
-                set_agent_network_mode(agent_name, bool(cfg["network_mode"]))
+            if "mode" in cfg:
+                set_agent_mode(agent_name, str(cfg["mode"]))
             if "network_host" in cfg:
                 set_agent_network_host(agent_name, str(cfg["network_host"]))
             if "network_port" in cfg:
                 set_agent_network_port(agent_name, int(cfg["network_port"]))
 
-    # Reload shared.config module so in-memory vars reflect the new values
     import importlib
     import shared.config
     importlib.reload(shared.config)
