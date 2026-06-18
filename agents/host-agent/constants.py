@@ -79,12 +79,31 @@ RESEARCH_DOMAINS: list[str] = [
     "evaluation strategy", "research", "dataset", "benchmark", "architecture",
     "transformer", "cnn", "diffusion", "gan", "reinforcement learning",
     "paper", "arxiv", "research proposal", "proof of concept",
+    # CV/ML implementation keywords
+    "ocr", "optical character recognition", "handwriting", "handwritten", "handwritten",
+    "text recognition", "document", "receipt", "invoice",
+    "image processing", "feature extraction", "pipeline",
+    "build", "develop", "create", "implement", "design",
+    "solution", "system", "model", "algorithm",
+    "training", "inference", "deployment", "preprocessing",
+    "augmentation", "transfer learning", "fine-tuning",
+    "detection", "recognition", "extraction", "parsing",
+    "classification", "regression", "clustering",
+    "embedding", "encoder", "decoder",
+    "cnn", "rnn", "lstm", "gru", "attention",
+    "resnet", "yolo", "efficientnet", "mobilenet",
+    "bert", "gpt", "t5", "whisper",
+    "pytorch", "tensorflow", "keras", "opencv",
 ]
 
 RESEARCH_ACTIONS: list[str] = [
     "recommend", "compare", "find", "search", "summarize", "analyze", "evaluate",
     "benchmark", "design", "plan", "prototype", "implement", "improve", "optimize",
     "select", "review", "survey", "study", "explore",
+    # Implementation actions
+    "build", "develop", "create", "set up", "configure", "deploy",
+    "train", "fine-tune", "preprocess", "extract", "detect", "recognize",
+    "classify", "parse", "process", "generate", "predict",
 ]
 
 NON_RESEARCH_PATTERNS: list[str] = [
