@@ -297,12 +297,11 @@ async def run_orchestration(task_id: str, query: str):
 
         report = await orch.orchestrate(query, progress_callback=progress)
 
-        # Ensure the final progress event is persisted before saving the task
-        # result. Without this, the SSE stream may send the 'done' event before
-        # the aggregation-complete progress event is in the DB, causing the UI
-        # to stay stuck on "Synthesizing final report..." instead of showing results.
-        await async_save_task_event(task_id, "aggregating", "complete", "Report finalized")
-        await async_save_task_event(task_id, "dispatching", "complete", "All agent responses received")
+        is_error = isinstance(report, dict) and report.get("error")
+
+        if not is_error:
+            await async_save_task_event(task_id, "aggregating", "complete", "Report finalized")
+            await async_save_task_event(task_id, "dispatching", "complete", "All agent responses received")
 
         diagram = await asyncio.to_thread(generate_agent_flow_diagram, query, report)
         agents_used = report.get("selected_agents", []) if isinstance(report, dict) else []
