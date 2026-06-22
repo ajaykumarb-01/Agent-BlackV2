@@ -13,7 +13,7 @@ import textwrap
 
 
 # ─── CONFIGURE THESE ───────────────────────────────────────────────────────────
-HOST = os.environ.get("DEPLOY_HOST", "64.227.177.219")
+HOST = os.environ.get("DEPLOY_HOST", "168.144.150.233")
 USER = os.environ.get("DEPLOY_USER", "root")
 # Password is prompted at runtime or set via DEPLOY_PASSWORD env var
 PASSWORD = os.environ.get("DEPLOY_PASSWORD", "Do12345@Do")

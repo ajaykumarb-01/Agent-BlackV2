@@ -71,6 +71,12 @@ async def research(req: AgentRequest):
     return AgentResponse(agent=AGENT_NAME, result=result)
 
 
+@app.get("/tools")
+async def list_tools():
+    tools = await mcp.list_tools()
+    return {"tools": {t.name: {"name": t.name, "description": t.description or "", "parameters": t.parameters or {}} for t in tools}}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "agent": AGENT_NAME}

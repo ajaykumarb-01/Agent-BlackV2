@@ -9,12 +9,15 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 LOGS = os.path.join(ROOT, "logs")
 PYTHON = sys.executable
 
+sys.path.insert(0, ROOT)
+from shared.config import get_agent_mode, get_agent_network_host, get_agent_network_port
+
 os.makedirs(LOGS, exist_ok=True)
 
 AGENTS = [
-    {"name": "research-agent", "port": 8001, "dir": os.path.join("agents", "research-agent")},
-    {"name": "solution-agent", "port": 8002, "dir": os.path.join("agents", "solution-agent")},
-    {"name": "experiment-agent", "port": 8003, "dir": os.path.join("agents", "experiment-agent")},
+    {"name": "research-agent", "key": "research", "port": 8001, "dir": os.path.join("agents", "research-agent")},
+    {"name": "solution-agent", "key": "solution", "port": 8002, "dir": os.path.join("agents", "solution-agent")},
+    {"name": "experiment-agent", "key": "experiment", "port": 8003, "dir": os.path.join("agents", "experiment-agent")},
     # host-agent is not started as a separate process here because the
     # control panel (port 8000) imports and cd runs the orchestrator in-process.
 ]
@@ -101,7 +104,17 @@ if __name__ == "__main__":
     print()
 
     for agent in AGENTS:
-        proc = start_agent(**agent)
+        mode = get_agent_mode(agent["key"])
+        if mode == "disabled":
+            print(f"  [SKIP] {agent['name']} -> DISABLED")
+            continue
+        if mode == "network":
+            host = get_agent_network_host(agent["key"])
+            port = get_agent_network_port(agent["key"])
+            print(f"  [SKIP] {agent['name']} -> NETWORK  http://{host}:{port} (running remotely)")
+            continue
+        # mode == "local" — start the agent
+        proc = start_agent(name=agent["name"], port=agent["port"], dir=agent["dir"])
         processes.append(proc)
         print(f"  [{proc.pid}] {agent['name']} -> http://localhost:{agent['port']}")
 
@@ -111,7 +124,11 @@ if __name__ == "__main__":
     print(f"  [{cp_proc.pid}] control-panel  -> http://localhost:8000")
 
     print()
-    print("All agents started. Logs written to logs/")
+    if not processes or processes == [cp_proc]:
+        print("No local agents started (all are network/disabled).")
+    else:
+        print(f"Started {len(processes) - 1} local agent(s) + control panel.")
+    print("Logs written to logs/")
     print("POST /api/logs/clear to clear log files at runtime")
     print("Press Ctrl+C to stop all agents.")
 
