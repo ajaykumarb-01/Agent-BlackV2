@@ -196,6 +196,17 @@ async def send_text_task(base_url: str, query: str) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=300) as httpx_client:
         resolver = A2ACardResolver(httpx_client=httpx_client, base_url=base_url)
         card = await resolver.get_agent_card()
+        rpc_url = f"{base_url.rstrip('/')}{A2A_RPC_PATH}"
+        if card.supported_interfaces:
+            card.supported_interfaces[0].url = rpc_url
+        else:
+            card.supported_interfaces = [
+                AgentInterface(
+                    protocol_binding="JSONRPC",
+                    protocol_version=PROTOCOL_VERSION_1_0,
+                    url=rpc_url,
+                )
+            ]
         client = await create_client(
             agent=card,
             client_config=ClientConfig(streaming=True, httpx_client=httpx_client),

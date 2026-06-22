@@ -196,7 +196,9 @@ def execute_tool(name: str, query: str = "", **kwargs) -> dict:
     return TOOLS[name](query=query, **kwargs)
 
 
-from shared.mcp import register_tool
+from fastmcp import FastMCP
+from shared.mcp import create_mcp_server
 
-for _name, _fn in TOOLS.items():
-    register_tool(_name, TOOL_SCHEMAS[_name]["description"], TOOL_SCHEMAS[_name], _fn)
+
+def build_mcp_server(agent_name: str = "Experiment Agent") -> FastMCP:
+    return create_mcp_server(agent_name, TOOLS, TOOL_SCHEMAS)
